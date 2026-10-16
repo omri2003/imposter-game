@@ -47,12 +47,17 @@
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { height: 48px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font: 500 .95rem var(--display); }
   .chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
-  #q, .nm { height: 48px; border: 1px solid var(--line); border-radius: 12px; background: none; color: var(--fg); font: 500 1rem var(--display); padding: 0 14px; -webkit-user-select: text; user-select: text; }
+  #q, .nm, #cc { height: 48px; border: 1px solid var(--line); border-radius: 12px; background: none; color: var(--fg); font: 500 1rem var(--display); padding: 0 14px; -webkit-user-select: text; user-select: text; }
   #words { max-height: 40vh; min-height: 120px; overflow-y: auto; border: 1px solid var(--line); border-radius: 16px; }
   #words label { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 1.05rem; }
   #words label.off span { color: var(--muted); text-decoration: line-through; }
   #words input { width: 22px; height: 22px; accent-color: var(--blue); }
   #words .hint { padding: 14px; }
+  #words small { color: var(--muted); font-size: .8rem; }
+  #words .txt { align-self: center; margin-inline-start: auto; }
+  .aw { display: flex; flex-wrap: wrap; gap: 8px; }
+  .aw .nm { flex: 1 1 100%; } .aw #cc { flex: 1 1 0; min-width: 0; width: auto; background: var(--surface); }
+  .aw .tonal { padding: 0 20px; }
   #wcount.warn { color: var(--red); }
   #card, #ocard {
     flex: 1; border: 0; border-radius: 28px; background: var(--gray); color: var(--fg);
@@ -165,6 +170,15 @@
     </div>
     <div class="label" data-t="cats"></div>
     <div class="chips" id="cats"></div>
+    <div class="sec">
+      <label class="label" for="cw" data-t="addLbl"></label>
+      <div class="aw">
+        <input class="nm" id="cw" maxlength="40" autocomplete="off">
+        <select class="nm" id="cc" data-ph="cats"></select>
+        <button class="tonal" id="cwadd" data-t="add"></button>
+      </div>
+      <p class="hint" id="cwhint" hidden data-t="dup"></p>
+    </div>
     <div class="row"><span class="label" data-t="words"></span><span class="hint" id="wcount"></span></div>
     <input id="q" type="search" data-ph="search">
     <div id="words"></div>
@@ -185,7 +199,6 @@
     <h2 class="label" id="plabel"></h2>
     <div class="card" id="plist"></div>
   </section>
-  <p class="hint" id="only" hidden data-t="only"></p>
   <p class="hint" id="wait" hidden data-t="waiting"></p>
   <div id="cfgslot"></div>
   <div class="bot">
@@ -264,6 +277,7 @@ const CATS = [
   { id: "situations", en: "Situations", he: "מצבים", words: {
     en: ["Beach","Wedding","Birthday party","Airport","Army base","Gym","Supermarket","Hospital","School","Cinema","Zoo","Casino","Prison","Space station","Cruise ship","Camping","Concert","Escape room","Bowling","Karaoke","Water park","Ski resort","Library","Bank"],
     he: ["חוף הים","חתונה","מסיבת יום הולדת","שדה תעופה","בסיס צבאי","חדר כושר","סופרמרקט","בית חולים","בית ספר","קולנוע","גן חיות","קזינו","כלא","תחנת חלל","ספינת תענוגות","קמפינג","הופעה","חדר בריחה","באולינג","קריוקי","פארק מים","אתר סקי","ספרייה","בנק"] } },
+  { id: "mine", en: "My words", he: "המילים שלי", words: { en: [], he: [] } },   // user's own words live in localStorage custom_<lang>
 ];
 const UI = {
   en: { players: "Players", imposters: "Imposters", options: "Options", cats: "Categories", words: "Words", search: "Search words",
@@ -279,7 +293,8 @@ const UI = {
     codeHint: "Room code · leave empty to host", yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join room",
     onePhone: "Play on one phone", back: "‹", leave: "‹ Leave room", copyLink: "Copy invite link", copied: "Copied",
     playersN: k => `Players (${k})`, you: "you", host: "host", waiting: "Waiting for host…", need3: "Need at least 3 players",
-    only: "Nobody else here yet — check the code", errName: "Enter your name", errCode: "Enter a 4-letter room code",
+    addLbl: "Add your own word", add: "Add", dup: "Already in the list", mineTag: "mine", del: "Delete",
+    nf: c => `Room ${c} not found. Check the code, or clear it to create a new room.`, errName: "Enter your name", errCode: "Enter a 4-letter room code",
     noNet: "Can't reach the online service. One-phone mode still works.", seen: (a, b) => `Seen ${a}/${b}`, roundLbl: "Round",
     inProgress: "Round in progress — you'll join the next one", tapAgain: "Tap to see again", toLobby: "Back to lobby",
     rmN: "Remove word · next round", keepN: "Keep word · next round" },
@@ -296,7 +311,8 @@ const UI = {
     codeHint: "קוד חדר · השאירו ריק כדי לפתוח חדר", yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף לחדר",
     onePhone: "משחקים על טלפון אחד", back: "›", leave: "› יציאה מהחדר", copyLink: "העתק קישור הזמנה", copied: "הועתק",
     playersN: k => `שחקנים (${k})`, you: "את/ה", host: "מארח/ת", waiting: "ממתינים למארח…", need3: "צריך לפחות 3 שחקנים",
-    only: "עדיין אין כאן אף אחד — בדקו את הקוד", errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
+    addLbl: "הוסיפו מילה משלכם", add: "הוסף", dup: "כבר קיימת ברשימה", mineTag: "שלי", del: "מחק",
+    nf: c => `החדר ${c} לא נמצא. בדקו את הקוד, או מחקו אותו כדי לפתוח חדר חדש.`, errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
     noNet: "אין חיבור לשירות המקוון. אפשר עדיין לשחק על טלפון אחד.", seen: (a, b) => `ראו ${a}/${b}`, roundLbl: "סיבוב",
     inProgress: "יש סיבוב בעיצומו — תצטרפו לסיבוב הבא", tapAgain: "הקש כדי לראות שוב", toLobby: "חזרה ללובי",
     rmN: "הסר מילה · סיבוב הבא", keepN: "השאר מילה · סיבוב הבא" },
@@ -307,6 +323,7 @@ const load = k => { try { return new Set(JSON.parse(localStorage.getItem(k)) || 
 const save = (k, set) => { try { localStorage.setItem(k, JSON.stringify([...set])); } catch {} };
 const loadJ = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const saveJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const loadCustom = l => { const v = loadJ("custom_" + l, []); return Array.isArray(v) ? v.filter(x => x && typeof x.w === "string" && typeof x.c === "string") : []; };
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
 // one-time migration of the old single exclusion list
@@ -316,16 +333,24 @@ let lang = loadJ("lang", "en") === "he" ? "he" : "en";
 let n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
 const opts = { cat: false, first: false, names: false, timer: 0, ...loadJ("opts", {}) };
 let names = loadJ("names", []); if (!Array.isArray(names)) names = [];
-let excluded = load("excluded_" + lang);
+let excluded = load("excluded_" + lang), custom = loadCustom(lang);   // custom: [{w, c}]
 const offCats = new Set([...load("offCats")].map(x => CATS.find(c => c.en === x)?.id ?? x));   // old saves used English labels
 
 const t = (k, ...a) => { const v = UI[lang][k] ?? UI.en[k]; return typeof v === "function" ? v(...a) : v; };
 const nm = k => ((opts.names && names[k]) || "").trim() || t("playerN", k + 1);
 
 // Words {w, c(ategory id)} in switched-on categories, minus removed ones. The only place round words come from.
-const visible = () => CATS.filter(c => !offCats.has(c.id)).flatMap(c => c.words[lang].map(w => ({ w, c: c.id })))
+const visible = () => CATS.filter(c => !offCats.has(c.id)).flatMap(c => [...c.words[lang], ...custom.filter(x => x.c === c.id).map(x => x.w)].map(w => ({ w, c: c.id })))
   .sort((a, b) => a.w.localeCompare(b.w, lang));
 const pool = () => visible().filter(x => !excluded.has(x.w));
+const allWords = () => [...CATS.flatMap(c => c.words[lang]), ...custom.map(x => x.w)];
+function addCustom(w, c) {   // false = empty or duplicate (case-insensitive) of any word in this language
+  w = w.trim();
+  if (!w || allWords().some(x => x.toLowerCase() === w.toLowerCase())) return false;
+  custom.push({ w, c }); saveJ("custom_" + lang, custom);
+  offCats.delete(c); save("offCats", offCats);   // adding to a switched-off category turns it on
+  return true;
+}
 const maxImp = () => Math.min(3, Math.floor((n - 1) / 2));
 // k distinct random indexes out of n
 function pickReds(n, k) { const s = new Set(); while (s.size < k) s.add(rnd(n)); return s; }
@@ -337,7 +362,7 @@ function show(s) {   // clears timers only on a real screen change
   stage = s; stopT();
   for (const k of ["home", "setup", "game", "room", "ogame"]) $(k).hidden = k !== s;
 }
-function stopT() { clearInterval(timerId); timerId = 0; }
+function stopT() { clearInterval(timerId); timerId = 0; clearTimeout(nfTimer); }
 const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 function buildNames() {
@@ -368,24 +393,30 @@ function syncOpts() {
 function setLang(l) {
   lang = l; saveJ("lang", l);
   document.documentElement.lang = l; document.documentElement.dir = l === "he" ? "rtl" : "ltr";
-  excluded = load("excluded_" + l);
+  excluded = load("excluded_" + l); custom = loadCustom(l);
   document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t));
   document.querySelectorAll("[data-ph]").forEach(el => { el.placeholder = t(el.dataset.ph); if (!el.labels.length) el.setAttribute("aria-label", t(el.dataset.ph)); });
   $("tohome").setAttribute("aria-label", t("backLbl")); $("invT").textContent = t("joinRoomN", inviteCode);
   document.querySelectorAll(".langs").forEach(el => el.innerHTML = [["en", "English"], ["he", "עברית"]].map(([k, v]) =>
     `<button class="chip" data-l="${k}" aria-pressed="${lang === k}">${v}</button>`).join(""));
-  syncOpts(); $("n").textContent = n; syncImp(); render(); go(); mainLbl();
+  fillSel(); syncOpts(); $("n").textContent = n; syncImp(); render(); go(); mainLbl();
 }
 // One main button: empty code = host a new room, any code = join it
 function mainLbl() { const c = $("code").value; $("create").textContent = c ? t("joinRoomN", c) : t("create"); }
 
+function fillSel() {   // "My words" first, then the real categories
+  const v = $("cc").value || "mine";
+  $("cc").innerHTML = [...CATS.filter(c => c.id === "mine"), ...CATS.filter(c => c.id !== "mine")].map(c => `<option value="${c.id}">${esc(c[lang])}</option>`).join("");
+  $("cc").value = v;
+}
 function render() {
-  $("cats").innerHTML = CATS.map(c =>
+  $("cats").innerHTML = CATS.filter(c => c.id !== "mine" || custom.some(x => x.c === "mine")).map(c =>
     `<button class="chip" data-c="${c.id}" aria-pressed="${!offCats.has(c.id)}">${esc(c[lang])}</button>`).join("");
   const q = $("q").value.trim().toLowerCase();
   const list = visible().filter(x => x.w.toLowerCase().includes(q));
+  const mine = new Set(custom.map(x => x.w));
   $("words").innerHTML = list.map(({ w }) =>
-    `<label class="${excluded.has(w) ? "off" : ""}"><input type="checkbox" data-w="${esc(w)}" ${excluded.has(w) ? "" : "checked"}><span>${esc(w)}</span></label>`
+    `<label class="${excluded.has(w) ? "off" : ""}"><input type="checkbox" data-w="${esc(w)}" aria-label="${esc(w)}" ${excluded.has(w) ? "" : "checked"}><span>${esc(w)}</span>${mine.has(w) ? `<small>${t("mineTag")}</small><button class="txt" data-del="${esc(w)}">${t("del")}</button>` : ""}</label>`
   ).join("") || `<p class="hint">${t(q ? "noMatch" : "turnOn")}</p>`;
   const p = pool().length;
   $("wcount").textContent = p ? t("inPlay", p) : t("none");
@@ -403,6 +434,20 @@ $("words").onchange = e => {
   e.target.checked ? excluded.delete(w) : excluded.add(w);
   save("excluded_" + lang, excluded); render();
 };
+$("words").onclick = e => {
+  const w = e.target.dataset.del; if (w == null) return;
+  custom = custom.filter(x => x.w !== w); saveJ("custom_" + lang, custom);
+  excluded.delete(w); save("excluded_" + lang, excluded); render();
+};
+function addWord() {
+  if (!$("cw").value.trim()) return;
+  const ok = addCustom($("cw").value, $("cc").value);
+  $("cwhint").hidden = ok;
+  if (ok) { $("cw").value = ""; render(); }
+}
+$("cwadd").onclick = addWord;
+$("cw").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) addWord(); };
+$("cw").oninput = () => $("cwhint").hidden = true;
 $("opts").onchange = e => {
   const o = e.target.dataset.o; if (!o) return;
   opts[o] = e.target.checked; saveJ("opts", opts); buildNames();
@@ -489,7 +534,7 @@ const SB_URL = "https://rmmojdxoodamrumenitm.supabase.co";
 const SB_KEY = "sb_publishable_z5t-Ln7K7GrzVK4SvMNnPg_PdVyC9g_";
 const SB_LEGACY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbW9qZHhvb2RhbXJ1bWVuaXRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNDI5NDYsImV4cCI6MjEwNzcxODk0Nn0.gbfYDuiSMld5qh9rIarlW9tOuWMb4wGpN0ehCvafMFQ";
 const KEYS = [SB_KEY, SB_LEGACY];   // publishable key first, legacy anon key if realtime rejects it
-let inviteCode = "", qrFor = "", ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false;
+let nfTimer = 0, inviteCode = "", qrFor = "", ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false;
 // R = current round: the "round" payload + seen:Set, revealed, endAt, done, v (0 hidden / 1 showing / 2 gray). Every client keeps it, so any can become host.
 const myId = (() => {
   let v = loadJ("myId", "");
@@ -527,7 +572,6 @@ function enter(c, create) {
   code = c; joining = !create; joinedAt = Date.now(); R = null; players = {};
   $("cfgslot").append($("cfg")); $("optNamesRow").hidden = true;
   connect(); go();
-  if (joining) setTimeout(go, 3200);   // re-render so the "nobody here" hint can appear
 }
 
 function connect() {
@@ -542,7 +586,10 @@ function connect() {
   on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync);
   c.subscribe(async st => {
     if (c !== ch) return;
-    if (st === "SUBSCRIBED") { await c.track({ name: myName, joinedAt }); send("sync", { id: myId }); }
+    if (st === "SUBSCRIBED") { await c.track({ name: myName, joinedAt }); send("sync", { id: myId });
+      clearTimeout(nfTimer);
+      if (joining) nfTimer = setTimeout(() => { if (c === ch && !Object.keys(players).some(k => k !== myId)) notFound(); }, 4000);   // joined, still alone: wrong code
+    }
     else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT") {
       if (ki < KEYS.length - 1) {   // retry once with the legacy key
         ki++; ch = null; try { cli.removeAllChannels(); } catch {} cli = null;
@@ -550,6 +597,13 @@ function connect() {
       } else { leave(); err("noNet"); }
     }
   });
+}
+
+function notFound() {   // back to the normal home view (also from an invite card) with the code kept and an error under it
+  const c = code; leave();
+  inviteCode = ""; $("inv").hidden = true; $("normal").hidden = false;
+  $("code").value = c; mainLbl();
+  $("errCode").textContent = t("nf", c); $("errCode").hidden = false;
 }
 
 function leave() {
@@ -620,7 +674,6 @@ function lobbyRender() {
     $("qrbox").hidden = $("qrcap").hidden = !$("qrbox").firstChild;
   }
   $("qrbox").setAttribute("aria-label", t("scan"));
-  $("only").hidden = !(joining && ids.length <= 1 && Date.now() - joinedAt > 3000);
   $("wait").hidden = host; $("cfg").hidden = !host;
   $("ostart").hidden = !host; $("ostart").disabled = ids.length < 3;
   $("need").hidden = !host || ids.length >= 3;
