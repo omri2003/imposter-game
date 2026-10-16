@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Imposter</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+  /* Layout: one centered column, a single big tap card per player. Single dark "game night" look. */
+  :root {
+    color-scheme: dark;
+    --bg: #14131a; --fg: #f1eff7; --muted: #8d8a9c; --line: #2a2833;
+    --blue: #2f6bff; --red: #ff3b4a; --gray: #3a3844;
+    --display: "Bricolage Grotesque", system-ui, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--display);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 16px; box-sizing: border-box;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  main { max-width: 440px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  #setup, #home, #room { height: auto; min-height: 100%; gap: 16px; }
+  h1 { font-size: 2.4rem; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
+  h1 span { color: var(--red); }
+  .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+  .stepper { direction: ltr; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 16px; padding: 8px; }
+  .stepper output { font-size: 3.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stepper button { width: 64px; height: 64px; font-size: 2rem; border-radius: 12px; background: var(--line); color: var(--fg); border: 0; }
+  .hint { color: var(--muted); font-size: .95rem; margin: 0; }
+  .go { height: 64px; border: 0; border-radius: 16px; background: var(--fg); color: var(--bg); font: 800 1.3rem var(--display); }
+  .ghost { height: 52px; border: 1px solid var(--line); border-radius: 16px; background: none; color: var(--muted); font: 500 1rem var(--display); }
+  button:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .count { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font: 500 .95rem var(--display); }
+  .chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+  #q, .nm { height: 48px; border: 1px solid var(--line); border-radius: 12px; background: none; color: var(--fg); font: 500 1rem var(--display); padding: 0 14px; -webkit-user-select: text; user-select: text; }
+  #words { max-height: 40vh; min-height: 120px; overflow-y: auto; border: 1px solid var(--line); border-radius: 16px; }
+  #words label { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 1.05rem; }
+  #words label.off span { color: var(--muted); text-decoration: line-through; }
+  #words input { width: 22px; height: 22px; accent-color: var(--blue); }
+  #words .hint { padding: 14px; }
+  #wcount.warn { color: var(--red); }
+  #card, #ocard {
+    flex: 1; border: 0; border-radius: 28px; background: var(--gray); color: var(--fg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    font: 800 1.6rem var(--display); text-align: center; padding: 24px; transition: background .15s;
+  }
+  #card.blue, #ocard.blue { background: var(--blue); }
+  #card.red, #ocard.red { background: var(--red); }
+  #card .word, #ocard .word { font-size: 2.6rem; line-height: 1.05; text-wrap: balance; }
+  #card small, #ocard small { font-size: 1rem; font-weight: 500; opacity: .75; }
+  #end { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+  .endq { font-size: 1.5rem; font-weight: 800; line-height: 1.25; margin: 0 0 12px; text-wrap: balance; }
+  @media (prefers-reduced-motion: reduce) { #card, #ocard { transition: none; } }
+  .opt { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; font-size: 1.05rem; }
+  .opt input { width: 22px; height: 22px; accent-color: var(--blue); }
+  .sub { display: flex; flex-direction: column; gap: 16px; }
+  .nm { width: 100%; box-sizing: border-box; }
+  #names { display: flex; flex-direction: column; gap: 8px; }
+  #first, #ofirst { font-size: 1.8rem; font-weight: 800; text-align: center; }
+  #clock, #oclock { font-size: 4rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; border-radius: 16px; }
+  #clock.up, #oclock.up { font-size: 2rem; color: var(--red); animation: flash .6s steps(2) infinite; }
+  @keyframes flash { 50% { background: var(--red); color: var(--fg); } }
+  #wordline, #owordline { font-size: 1.2rem; text-align: center; }
+  #wordline b, #impline b, #owordline b, #oimpline b { display: block; font-size: 2.4rem; line-height: 1.1; }
+  #impline, #oimpline { text-align: center; color: var(--red); font-size: 1.1rem; }
+  .go:disabled { opacity: .35; }
+  .err { color: var(--red); }
+  .cfg { display: flex; flex-direction: column; gap: 16px; }
+  .cj { display: flex; gap: 8px; }
+  #code { flex: 1; min-width: 0; width: auto; height: 64px; direction: ltr; text-align: center; text-transform: uppercase; letter-spacing: .3em; font-size: 1.4rem; font-weight: 800; }
+  .cj .go { padding: 0 24px; }
+  #rcode { font-size: 4.5rem; font-weight: 800; letter-spacing: .12em; text-align: center; direction: ltr; -webkit-user-select: text; user-select: text; }
+  #plist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; }
+  .pl { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 1.05rem; }
+  .pl:last-child { border-bottom: 0; }
+  .pl small { color: var(--muted); } .pl .hb { color: var(--blue); }
+  #obelow { display: flex; flex-direction: column; gap: 12px; }
+  #ogame.rev #obelow { flex: 1; justify-content: center; }
+  #ogame, #room { height: auto; min-height: 100%; }
+  #ogame { height: 100%; }
+  @media (prefers-reduced-motion: reduce) { #clock.up, #oclock.up { animation: none; } }
+</style>
+</head>
+<body>
+
+<main id="home">
+  <h1>Imp<span>o</span>ster</h1>
+  <div class="chips langs"></div>
+  <input class="nm" id="name" maxlength="16" data-ph="yourName" autocomplete="off">
+  <button class="go" id="create" data-t="create"></button>
+  <div class="label" data-t="orJoin"></div>
+  <div class="cj">
+    <input class="nm" id="code" maxlength="4" data-ph="roomCode" autocapitalize="characters" autocomplete="off" spellcheck="false">
+    <button class="go" id="join" data-t="join"></button>
+  </div>
+  <p class="hint err" id="err" hidden></p>
+  <button class="ghost" id="local" data-t="onePhone"></button>
+</main>
+
+<main id="setup" hidden>
+  <h1>Imp<span>o</span>ster</h1>
+  <div class="chips langs"></div>
+  <div class="label" data-t="players"></div>
+  <div class="stepper">
+    <button id="minus" aria-label="−">−</button>
+    <output id="n">5</output>
+    <button id="plus" aria-label="+">+</button>
+  </div>
+  <div id="names" hidden></div>
+  <div class="cfg" id="cfg">
+    <div class="sub" id="impbox" hidden>
+      <div class="label" data-t="imposters"></div>
+      <div class="stepper">
+        <button id="iminus" aria-label="−">−</button>
+        <output id="ni">1</output>
+        <button id="iplus" aria-label="+">+</button>
+      </div>
+    </div>
+    <p class="hint" id="split"></p>
+    <div class="label" data-t="options"></div>
+    <div id="opts">
+      <label class="opt"><span data-t="optCat"></span><input type="checkbox" data-o="cat"></label>
+      <label class="opt"><span data-t="optFirst"></span><input type="checkbox" data-o="first"></label>
+      <label class="opt" id="optNamesRow"><span data-t="optNames"></span><input type="checkbox" data-o="names"></label>
+      <div class="opt"><span data-t="optTimer"></span></div>
+      <div class="chips" id="tmr"></div>
+    </div>
+    <div class="label" data-t="cats"></div>
+    <div class="chips" id="cats"></div>
+    <div class="row"><span class="label" data-t="words"></span><span class="hint" id="wcount"></span></div>
+    <input id="q" type="search" data-ph="search">
+    <div id="words"></div>
+  </div>
+  <button class="go" id="start" data-t="start"></button>
+  <button class="ghost" id="tohome" data-t="back"></button>
+</main>
+
+<main id="room" hidden>
+  <div class="row"><span class="label" data-t="roomCode"></span><button class="chip" id="leave" data-t="leave"></button></div>
+  <div id="rcode"></div>
+  <button class="ghost" id="copy" data-t="copyLink"></button>
+  <input class="nm" id="link" readonly hidden aria-label="link">
+  <div class="label" id="plabel"></div>
+  <div id="plist"></div>
+  <p class="hint" id="only" hidden data-t="only"></p>
+  <p class="hint" id="wait" hidden data-t="waiting"></p>
+  <div id="cfgslot"></div>
+  <button class="go" id="ostart" data-t="start" hidden></button>
+  <p class="hint" id="need" hidden data-t="need3"></p>
+</main>
+
+<main id="ogame" hidden>
+  <div class="row"><span class="label" data-t="roundLbl"></span><span class="count" id="seen"></span></div>
+  <button id="ocard"></button>
+  <p class="endq" id="onot" hidden data-t="inProgress"></p>
+  <div id="obelow">
+    <div id="ofirst" hidden></div>
+    <div id="oclock" hidden></div>
+    <div id="owordline" hidden></div>
+    <div id="oimpline" hidden></div>
+    <button class="ghost" id="otstart" data-t="startTimer" hidden></button>
+    <button class="go" id="oreveal" data-t="reveal" hidden></button>
+    <div id="opost" hidden>
+      <p class="endq" data-t="removeQ"></p>
+      <button class="go" id="orm" data-t="rmN" style="width:100%"></button>
+      <button class="ghost" id="okeep" data-t="keepN" style="width:100%;margin-top:12px"></button>
+      <button class="ghost" id="oback" data-t="toLobby" style="width:100%;margin-top:12px"></button>
+    </div>
+    <p class="hint" id="owaitp" hidden data-t="waiting"></p>
+  </div>
+  <button class="ghost" id="oleave" data-t="leave"></button>
+</main>
+
+<main id="game" hidden>
+  <div class="row"><span class="label" data-t="pass"></span><span class="count" id="left"></span></div>
+  <button id="card"></button>
+  <div id="end" hidden>
+    <div id="first" hidden></div>
+    <div id="tbox" hidden>
+      <div id="clock"></div>
+      <button class="ghost" id="tstart" data-t="startTimer" style="width:100%"></button>
+    </div>
+    <button class="go" id="reveal" data-t="reveal"></button>
+    <div id="post" hidden>
+      <div id="wordline"></div>
+      <div id="impline"></div>
+      <p class="endq" data-t="removeQ"></p>
+      <button class="go" id="rm" data-t="rm" style="width:100%"></button>
+      <button class="ghost" id="keep" data-t="keep" style="width:100%;margin-top:12px"></button>
+    </div>
+  </div>
+  <button class="ghost" id="quit" data-t="quit"></button>
+</main>
+
+<script>
+// Categories: stable id, per-language label, per-language word list (same order/meaning).
+const CATS = [
+  { id: "shows", en: "Shows", he: "סדרות", words: {
+    en: ["Friends","Breaking Bad","Game of Thrones","The Office","Stranger Things","Squid Game","Money Heist","Fauda","Shtisel","The Simpsons","SpongeBob","Pokémon","Peaky Blinders","Wednesday","The Last of Us","Rick and Morty","How I Met Your Mother","The Big Bang Theory","Prison Break","Lost","The Witcher","The Crown","Narcos","Dexter","Suits","Grey's Anatomy","Modern Family","Family Guy","South Park","Brooklyn Nine-Nine","House of the Dragon","The Mandalorian","Lupin","Dark","Vikings","The Boys","Sherlock","Better Call Saul","Black Mirror","Euphoria","Survivor","Big Brother","MasterChef","Naruto","One Piece","Dragon Ball","Attack on Titan","Tom and Jerry","Ben 10","Ninja Turtles"],
+    he: ["חברים","שובר שורות","משחקי הכס","המשרד","דברים מוזרים","משחק הדיונון","בית הנייר","פאודה","שטיסל","משפחת סימפסון","בובספוג","פוקימון","פיקי בליינדרס","וונסדיי","האחרונים בינינו","ריק ומורטי","איך פגשתי את אמא","המפץ הגדול","בריחה מהכלא","אבודים","הוויצ'ר","הכתר","נרקוס","דקסטר","חליפות","האנטומיה של גריי","מודרן פמילי","איש משפחה","סאות' פארק","ברוקלין תשע-תשע","בית הדרקון","המנדלוריאני","לופין","דארק","ויקינגים","הבנים","שרלוק","מוטב לקרוא לשאול","מראה שחורה","אופוריה","הישרדות","האח הגדול","מאסטר שף","נארוטו","וואן פיס","דרגון בול","מתקפת הטיטאנים","טום וג'רי","בן 10","צבי הנינג'ה"] } },
+  { id: "movies", en: "Movies", he: "סרטים", words: {
+    en: ["Harry Potter","Star Wars","Titanic","The Lion King","Frozen","Barbie","Batman","Spider-Man","Shrek","Toy Story","The Lord of the Rings","Avatar","Jurassic Park","Inception","Interstellar","The Matrix","Fast & Furious","James Bond","Mission: Impossible","Pirates of the Caribbean","Home Alone","Back to the Future","The Godfather","Forrest Gump","Gladiator","Joker","Oppenheimer","Top Gun","Finding Nemo","Up","Minions","Kung Fu Panda","Madagascar","Ice Age","Cars","Ratatouille","Mean Girls","Rocky","Dune","Avengers","Iron Man","Superman","Hulk"],
+    he: ["הארי פוטר","מלחמת הכוכבים","טיטניק","מלך האריות","לשחרר את הקסם","ברבי","באטמן","ספיידרמן","שרק","צעצוע של סיפור","שר הטבעות","אווטאר","פארק היורה","אינספשן","בין כוכבים","מטריקס","מהיר ועצבני","ג'יימס בונד","משימה בלתי אפשרית","שודדי הקאריביים","שכחתי אותך בבית","בחזרה לעתיד","הסנדק","פורסט גאמפ","גלדיאטור","ג'וקר","אופנהיימר","טופ גאן","מוצאים את נמו","למעלה","מיניונים","קונג פו פנדה","מדגסקר","עידן הקרח","מכוניות","רטטוי","בנות רעות","רוקי","חולית","הנוקמים","איירון מן","סופרמן","האלק"] } },
+  { id: "games", en: "Games", he: "משחקים", words: {
+    en: ["Minecraft","Fortnite","FIFA","Mario","Tetris","Call of Duty","GTA","Roblox","Among Us","Clash of Clans","League of Legends","Counter-Strike","Pac-Man","Candy Crush","Angry Birds","Zelda","Sonic","Monopoly","Chess","Uno","Rubik's Cube"],
+    he: ["מיינקראפט","פורטנייט","פיפא","מריו","טטריס","קול אוף דיוטי","ג'י טי איי","רובלוקס","אמונג אס","קלאש אוף קלאנס","ליג אוף לג'נדס","קאונטר סטרייק","פקמן","קנדי קראש","אנגרי בירדס","זלדה","סוניק","מונופול","שחמט","אונו","קובייה הונגרית"] } },
+  { id: "brands", en: "Brands & apps", he: "מותגים ואפליקציות", words: {
+    en: ["McDonald's","Coca-Cola","iPhone","Instagram","TikTok","WhatsApp","Netflix","Spotify","Tesla","Google","YouTube","Amazon","Apple","Samsung","PlayStation","Xbox","Nintendo Switch","Lego","IKEA","Nike","Adidas","Starbucks","Red Bull","Nutella","Bamba","Bissli","Waze","ChatGPT","Uber","Airbnb"],
+    he: ["מקדונלדס","קוקה קולה","אייפון","אינסטגרם","טיקטוק","וואטסאפ","נטפליקס","ספוטיפיי","טסלה","גוגל","יוטיוב","אמזון","אפל","סמסונג","פלייסטיישן","אקסבוקס","נינטנדו סוויץ'","לגו","איקאה","נייקי","אדידס","סטארבקס","רד בול","נוטלה","במבה","ביסלי","ווייז","צ'אט ג'יפיטי","אובר","איירבנב"] } },
+  { id: "people", en: "People & events", he: "אנשים ואירועים", words: {
+    en: ["Messi","Ronaldo","Michael Jordan","Taylor Swift","Michael Jackson","Elon Musk","Albert Einstein","MrBeast","Drake","Eminem","The Beatles","Shakira","Bad Bunny","Eurovision","World Cup","Olympics"],
+    he: ["מסי","רונאלדו","מייקל ג'ורדן","טיילור סוויפט","מייקל ג'קסון","אילון מאסק","אלברט איינשטיין","מיסטר ביסט","דרייק","אמינם","הביטלס","שאקירה","באד באני","אירוויזיון","מונדיאל","האולימפיאדה"] } },
+  { id: "food", en: "Food", he: "אוכל", words: {
+    en: ["Pizza","Sushi","Shawarma","Falafel","Hummus","Burger","Hot dog","Pasta","Ice cream","Popcorn","Chocolate","Schnitzel","Sabich","Malawach","Shakshuka","Bourekas","Ramen","Tacos","Croissant","Pancakes","Donut"],
+    he: ["פיצה","סושי","שווארמה","פלאפל","חומוס","המבורגר","נקניקייה","פסטה","גלידה","פופקורן","שוקולד","שניצל","סביח","מלוואח","שקשוקה","בורקס","ראמן","טאקו","קרואסון","פנקייק","סופגנייה"] } },
+  { id: "places", en: "Places", he: "מקומות", words: {
+    en: ["Disneyland","Eiffel Tower","Tel Aviv","Eilat","Dead Sea","New York","Paris","London","Dubai","Las Vegas","Jerusalem","Haifa","Amsterdam","Thailand","Statue of Liberty","Great Wall of China","Pyramids","Mount Everest"],
+    he: ["דיסנילנד","מגדל אייפל","תל אביב","אילת","ים המלח","ניו יורק","פריז","לונדון","דובאי","לאס וגאס","ירושלים","חיפה","אמסטרדם","תאילנד","פסל החירות","החומה הגדולה של סין","הפירמידות","הר האוורסט"] } },
+  { id: "situations", en: "Situations", he: "מצבים", words: {
+    en: ["Beach","Wedding","Birthday party","Airport","Army base","Gym","Supermarket","Hospital","School","Cinema","Zoo","Casino","Prison","Space station","Cruise ship","Camping","Concert","Escape room","Bowling","Karaoke","Water park","Ski resort","Library","Bank"],
+    he: ["חוף הים","חתונה","מסיבת יום הולדת","שדה תעופה","בסיס צבאי","חדר כושר","סופרמרקט","בית חולים","בית ספר","קולנוע","גן חיות","קזינו","כלא","תחנת חלל","ספינת תענוגות","קמפינג","הופעה","חדר בריחה","באולינג","קריוקי","פארק מים","אתר סקי","ספרייה","בנק"] } },
+];
+const UI = {
+  en: { players: "Players", imposters: "Imposters", options: "Options", cats: "Categories", words: "Words", search: "Search words",
+    split: (b, r) => `${b} blue · ${r} red`, noMatch: "No word matches your search", turnOn: "Turn on a category",
+    inPlay: p => `${p} in play`, none: "No words in play", optCat: "Imposter sees the category", optFirst: "Random first speaker",
+    optNames: "Player names", optTimer: "Discussion timer", off: "Off", min: m => `${m} min`, start: "Start", pass: "Pass the phone",
+    left: k => `${k} left`, playerN: k => `Player ${k}`, passPhone: "Pass the phone · ", tapSee: "Tap to see your color",
+    imposter: "IMPOSTER", blend: "Blend in · tap to hide", wordIs: "The word is", tapHide: "Tap to hide", category: c => `Category: ${c}`,
+    starts: p => `${p} starts`, startTimer: "Start timer", timesUp: "Time's up — vote!", reveal: "Reveal", wasWord: "The word was",
+    impLabel: k => k > 1 ? "Imposters" : "Imposter", removeQ: "Remove this round's word from the list?",
+    rm: "Remove word · play again", keep: "Keep word · play again", quit: "Back to setup",
+    yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join",
+    onePhone: "Play on one phone", back: "Back", leave: "Leave", copyLink: "Copy invite link", copied: "Copied",
+    playersN: k => `Players (${k})`, you: "you", host: "host", waiting: "Waiting for host…", need3: "Need at least 3 players",
+    only: "Nobody else here yet — check the code", errName: "Enter your name", errCode: "Enter a 4-letter room code",
+    noNet: "Can't reach the online service. One-phone mode still works.", seen: (a, b) => `Seen ${a}/${b}`, roundLbl: "Round",
+    inProgress: "Round in progress — you'll join the next one", tapAgain: "Tap to see again", toLobby: "Back to lobby",
+    rmN: "Remove word · next round", keepN: "Keep word · next round" },
+  he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
+    split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
+    inPlay: p => `${p} במשחק`, none: "אין מילים במשחק", optCat: "המתחזה רואה את הקטגוריה", optFirst: "דובר ראשון אקראי",
+    optNames: "שמות שחקנים", optTimer: "טיימר דיון", off: "כבוי", min: m => `${m} דק׳`, start: "התחל", pass: "מעבירים את הטלפון",
+    left: k => `נשארו ${k}`, playerN: k => `שחקן ${k}`, passPhone: "העבר את הטלפון · ", tapSee: "הקש כדי לראות את הצבע",
+    imposter: "מתחזה", blend: "תשתלב · הקש להסתרה", wordIs: "המילה היא", tapHide: "הקש להסתרה", category: c => `קטגוריה: ${c}`,
+    starts: p => `${p} מתחיל/ה`, startTimer: "התחל טיימר", timesUp: "נגמר הזמן — מצביעים!", reveal: "חשוף", wasWord: "המילה הייתה",
+    impLabel: k => k > 1 ? "המתחזים" : "המתחזה", removeQ: "להסיר את המילה של הסיבוב מהרשימה?",
+    rm: "הסר מילה · משחק חדש", keep: "השאר מילה · משחק חדש", quit: "חזרה להגדרות",
+    yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף",
+    onePhone: "משחקים על טלפון אחד", back: "חזרה", leave: "יציאה", copyLink: "העתק קישור הזמנה", copied: "הועתק",
+    playersN: k => `שחקנים (${k})`, you: "את/ה", host: "מארח/ת", waiting: "ממתינים למארח…", need3: "צריך לפחות 3 שחקנים",
+    only: "עדיין אין כאן אף אחד — בדקו את הקוד", errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
+    noNet: "אין חיבור לשירות המקוון. אפשר עדיין לשחק על טלפון אחד.", seen: (a, b) => `ראו ${a}/${b}`, roundLbl: "סיבוב",
+    inProgress: "יש סיבוב בעיצומו — תצטרפו לסיבוב הבא", tapAgain: "הקש כדי לראות שוב", toLobby: "חזרה ללובי",
+    rmN: "הסר מילה · סיבוב הבא", keepN: "השאר מילה · סיבוב הבא" },
+};
+const $ = id => document.getElementById(id);
+const rnd = k => crypto.getRandomValues(new Uint32Array(1))[0] % k;
+const load = k => { try { return new Set(JSON.parse(localStorage.getItem(k)) || []); } catch { return new Set(); } };
+const save = (k, set) => { try { localStorage.setItem(k, JSON.stringify([...set])); } catch {} };
+const loadJ = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const saveJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+
+// one-time migration of the old single exclusion list
+try { if (localStorage.getItem("excluded_en") == null && localStorage.getItem("excluded") != null) localStorage.setItem("excluded_en", localStorage.getItem("excluded")); } catch {}
+
+let lang = loadJ("lang", "en") === "he" ? "he" : "en";
+let n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
+const opts = { cat: false, first: false, names: false, timer: 0, ...loadJ("opts", {}) };
+let names = loadJ("names", []); if (!Array.isArray(names)) names = [];
+let excluded = load("excluded_" + lang);
+const offCats = new Set([...load("offCats")].map(x => CATS.find(c => c.en === x)?.id ?? x));   // old saves used English labels
+
+const t = (k, ...a) => { const v = UI[lang][k] ?? UI.en[k]; return typeof v === "function" ? v(...a) : v; };
+const nm = k => ((opts.names && names[k]) || "").trim() || t("playerN", k + 1);
+
+// Words {w, c(ategory id)} in switched-on categories, minus removed ones. The only place round words come from.
+const visible = () => CATS.filter(c => !offCats.has(c.id)).flatMap(c => c.words[lang].map(w => ({ w, c: c.id })))
+  .sort((a, b) => a.w.localeCompare(b.w, lang));
+const pool = () => visible().filter(x => !excluded.has(x.w));
+const maxImp = () => Math.min(3, Math.floor((n - 1) / 2));
+// k distinct random indexes out of n
+function pickReds(n, k) { const s = new Set(); while (s.size < k) s.add(rnd(n)); return s; }
+// --- end of pure logic ---
+
+let stage = "";
+function show(s) {   // clears timers only on a real screen change
+  if (s === stage) return;
+  stage = s; stopT();
+  for (const k of ["home", "setup", "game", "room", "ogame"]) $(k).hidden = k !== s;
+}
+function stopT() { clearInterval(timerId); timerId = 0; }
+const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+function buildNames() {
+  $("names").hidden = !opts.names;
+  $("names").innerHTML = !opts.names ? "" : Array.from({ length: n }, (_, k) =>
+    `<input class="nm" data-k="${k}" value="${esc(names[k] || "")}" placeholder="${esc(t("playerN", k + 1))}" aria-label="${esc(t("playerN", k + 1))}">`).join("");
+}
+function syncImp() {   // imposter stepper + split hint for the current n (also used by the online lobby)
+  nImp = n >= 8 ? Math.min(Math.max(1, nImp), maxImp()) : 1;
+  $("ni").textContent = nImp;
+  $("impbox").hidden = n < 8;
+  $("split").textContent = t("split", n - nImp, nImp);
+}
+function setN(v) {
+  n = Math.min(20, Math.max(3, v));
+  $("n").textContent = n;
+  syncImp();
+  buildNames();
+}
+
+function syncOpts() {
+  document.querySelectorAll("[data-o]").forEach(el => el.checked = !!opts[el.dataset.o]);
+  $("tmr").innerHTML = [0, 1, 2, 3, 5].map(m =>
+    `<button class="chip" data-m="${m}" aria-pressed="${opts.timer === m}">${m ? t("min", m) : t("off")}</button>`).join("");
+  buildNames();
+}
+
+function setLang(l) {
+  lang = l; saveJ("lang", l);
+  document.documentElement.lang = l; document.documentElement.dir = l === "he" ? "rtl" : "ltr";
+  excluded = load("excluded_" + l);
+  document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t));
+  document.querySelectorAll("[data-ph]").forEach(el => { el.placeholder = t(el.dataset.ph); el.setAttribute("aria-label", t(el.dataset.ph)); });
+  document.querySelectorAll(".langs").forEach(el => el.innerHTML = [["en", "English"], ["he", "עברית"]].map(([k, v]) =>
+    `<button class="chip" data-l="${k}" aria-pressed="${lang === k}">${v}</button>`).join(""));
+  syncOpts(); $("n").textContent = n; syncImp(); render(); go();
+}
+
+function render() {
+  $("cats").innerHTML = CATS.map(c =>
+    `<button class="chip" data-c="${c.id}" aria-pressed="${!offCats.has(c.id)}">${esc(c[lang])}</button>`).join("");
+  const q = $("q").value.trim().toLowerCase();
+  const list = visible().filter(x => x.w.toLowerCase().includes(q));
+  $("words").innerHTML = list.map(({ w }) =>
+    `<label class="${excluded.has(w) ? "off" : ""}"><input type="checkbox" data-w="${esc(w)}" ${excluded.has(w) ? "" : "checked"}><span>${esc(w)}</span></label>`
+  ).join("") || `<p class="hint">${t(q ? "noMatch" : "turnOn")}</p>`;
+  const p = pool().length;
+  $("wcount").textContent = p ? t("inPlay", p) : t("none");
+  $("wcount").className = p ? "hint" : "hint warn";
+}
+document.querySelectorAll(".langs").forEach(el => el.onclick = e => { const l = e.target.dataset.l; if (l) setLang(l); });
+$("cats").onclick = e => {
+  const c = e.target.dataset.c; if (!c) return;
+  offCats.has(c) ? offCats.delete(c) : offCats.add(c);
+  save("offCats", offCats); render();
+};
+$("q").oninput = render;
+$("words").onchange = e => {
+  const w = e.target.dataset.w;
+  e.target.checked ? excluded.delete(w) : excluded.add(w);
+  save("excluded_" + lang, excluded); render();
+};
+$("opts").onchange = e => {
+  const o = e.target.dataset.o; if (!o) return;
+  opts[o] = e.target.checked; saveJ("opts", opts); buildNames();
+};
+$("tmr").onclick = e => {
+  const m = e.target.dataset.m; if (m == null) return;
+  opts.timer = +m; saveJ("opts", opts); syncOpts();
+};
+$("names").oninput = e => { names[+e.target.dataset.k] = e.target.value; saveJ("names", names); };
+
+function newRound() {
+  stopT();
+  const p = pool();
+  if (!p.length) { render(); return show("setup"); }
+  let pick;
+  do pick = p[rnd(p.length)]; while (pick.w === lastWord && p.length > 1);
+  word = lastWord = pick.w; wordCat = CATS.find(c => c.id === pick.c)[lang];
+  const reds = pickReds(n, nImp);
+  roles = Array.from({ length: n }, (_, k) => reds.has(k) ? "red" : "blue");
+  i = 0; busy = waiting = false; idle();
+  show("game");
+}
+
+function idle() {
+  const left = n - i;
+  $("left").textContent = t("left", left);
+  $("card").hidden = !left;
+  $("end").hidden = !!left;
+  $("card").className = "";
+  if (left) $("card").innerHTML = `${esc(nm(i))}<small>${i ? t("passPhone") : ""}${t("tapSee")}</small>`;
+  else showEnd();
+}
+
+function showEnd() {
+  stopT();
+  $("post").hidden = true; $("reveal").hidden = false;
+  firstP = opts.first ? rnd(n) : -1;
+  $("first").hidden = firstP < 0;
+  if (firstP >= 0) $("first").textContent = t("starts", nm(firstP));
+  $("tbox").hidden = !opts.timer;
+  $("clock").textContent = mmss(opts.timer * 60); $("clock").className = "";
+  $("tstart").hidden = false;
+}
+function tick() {
+  const s = Math.ceil((endAt - Date.now()) / 1000);
+  if (s > 0) { $("clock").textContent = mmss(s); return; }
+  stopT();
+  $("clock").textContent = t("timesUp"); $("clock").className = "up";
+  try { navigator.vibrate?.([500, 200, 500, 200, 500]); } catch {}
+}
+$("tstart").onclick = () => {
+  $("tstart").hidden = true; endAt = Date.now() + opts.timer * 60000;
+  stopT(); timerId = setInterval(tick, 250); tick();
+};
+$("reveal").onclick = () => {
+  const imps = roles.flatMap((r, k) => r === "red" ? [nm(k)] : []);
+  $("wordline").innerHTML = `${t("wasWord")}<b>${esc(word)}</b>`;
+  $("impline").innerHTML = `${t("impLabel", imps.length)}: <b>${esc(imps.join(", "))}</b>`;
+  $("reveal").hidden = true; $("post").hidden = false;
+};
+
+$("card").onclick = () => {
+  if (busy) return;
+  if (waiting) { waiting = false; return idle(); }   // color showing → tap hides it, next player
+  const r = roles[i++];
+  waiting = busy = true;
+  setTimeout(() => busy = false, 400);   // ponytail: stops a double-tap hiding the color instantly
+  $("card").className = r;
+  $("card").innerHTML = r === "red"
+    ? `<span class="word">${t("imposter")}</span>${opts.cat ? `<small>${esc(t("category", wordCat))}</small>` : ""}<small>${t("blend")}</small>`
+    : `<small>${t("wordIs")}</small><span class="word">${esc(word)}</span><small>${t("tapHide")}</small>`;
+};
+
+$("minus").onclick = () => setN(n - 1);
+$("plus").onclick = () => setN(n + 1);
+$("iminus").onclick = () => { nImp--; syncImp(); };
+$("iplus").onclick = () => { nImp++; syncImp(); };
+$("start").onclick = newRound;
+$("quit").onclick = () => { stopT(); render(); show("setup"); };
+$("rm").onclick = () => { excluded.add(word); save("excluded_" + lang, excluded); render(); newRound(); };
+$("keep").onclick = newRound;
+// ===== Online rooms: Supabase Realtime broadcast + presence only (no tables) =====
+const SB_URL = "https://rmmojdxoodamrumenitm.supabase.co";
+const SB_KEY = "sb_publishable_z5t-Ln7K7GrzVK4SvMNnPg_PdVyC9g_";
+const SB_LEGACY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbW9qZHhvb2RhbXJ1bWVuaXRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNDI5NDYsImV4cCI6MjEwNzcxODk0Nn0.gbfYDuiSMld5qh9rIarlW9tOuWMb4wGpN0ehCvafMFQ";
+const KEYS = [SB_KEY, SB_LEGACY];   // publishable key first, legacy anon key if realtime rejects it
+let ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false;
+// R = current round: the "round" payload + seen:Set, revealed, endAt, done, v (0 hidden / 1 showing / 2 gray). Every client keeps it, so any can become host.
+const myId = (() => {
+  let v = loadJ("myId", "");
+  if (typeof v !== "string" || v.length < 8) { v = Array.from({ length: 12 }, () => rnd(36).toString(36)).join(""); saveJ("myId", v); }
+  return v;
+})();
+
+// host = present player with the smallest joinedAt (tie → smaller id); leaving host hands over automatically
+const order = ps => Object.keys(ps).sort((a, b) => ps[a].joinedAt - ps[b].joinedAt || (a < b ? -1 : 1));
+const hostOf = ps => order(ps)[0];
+const genCode = () => { const A = "ABCDEFGHJKMNPQRSTUVWXYZ"; return Array.from({ length: 4 }, () => A[rnd(A.length)]).join(""); };   // no I, O, L; ponytail: no collision check, 23^4 codes
+const send = (event, payload) => ch?.send({ type: "broadcast", event, payload });
+const err = k => { $("err").textContent = k ? t(k) : ""; $("err").hidden = !k; };
+
+function client() {
+  while (!cli && window.supabase && ki < KEYS.length) { try { cli = supabase.createClient(SB_URL, KEYS[ki]); } catch { ki++; } }
+  return cli;
+}
+
+function enter(c, create) {
+  myName = $("name").value.trim().slice(0, 16);
+  if (!myName) { err("errName"); return $("name").focus(); }
+  if (!/^[A-Z]{4}$/.test(c)) { err("errCode"); return $("code").focus(); }
+  saveJ("name", myName); err("");
+  if (!client()) return err("noNet");
+  code = c; joining = !create; joinedAt = Date.now(); R = null; players = {};
+  $("cfgslot").append($("cfg")); $("optNamesRow").hidden = true;
+  connect(); go();
+  if (joining) setTimeout(go, 3200);   // re-render so the "nobody here" hint can appear
+}
+
+function connect() {
+  const c = ch = client().channel("imposter:" + code, { config: { broadcast: { self: true }, presence: { key: myId } } });
+  const on = (ev, fn) => c.on("broadcast", { event: ev }, ({ payload }) => c === ch && fn(payload || {}));
+  c.on("presence", { event: "sync" }, () => {
+    if (c !== ch) return;
+    players = {}; const st = c.presenceState();
+    for (const k in st) players[k] = st[k][0];
+    go();
+  });
+  on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync);
+  c.subscribe(async st => {
+    if (c !== ch) return;
+    if (st === "SUBSCRIBED") { await c.track({ name: myName, joinedAt }); send("sync", { id: myId }); }
+    else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT") {
+      if (ki < KEYS.length - 1) {   // retry once with the legacy key
+        ki++; ch = null; try { cli.removeAllChannels(); } catch {} cli = null;
+        if (client()) connect(); else { leave(); err("noNet"); }
+      } else { leave(); err("noNet"); }
+    }
+  });
+}
+
+function leave() {
+  const c = ch; ch = null; R = null; players = {}; stopT();
+  try { cli?.removeChannel(c); } catch {}
+  show("home");
+}
+
+// ---- incoming events ----
+function onRound(p) {
+  if (R && R.roundId === p.roundId) return;   // replay from a sync answer: already have it
+  stopT();
+  R = { ...p, seen: new Set(), revealed: false, endAt: 0, done: false, v: 0 };
+  go();
+}
+function onSeen(p) {
+  if (R?.roundId !== p.roundId) return;
+  [p.id, ...(p.ids || [])].forEach(x => x && R.seen.add(x));
+  go();
+}
+function onTimer(p) {
+  if (R?.roundId !== p.roundId || R.endAt === p.endAt) return;
+  R.endAt = p.endAt; R.done = false; go();
+}
+function onReveal(p) { if (R?.roundId !== p.roundId) return; R.revealed = true; go(); }
+function onLobby() { stopT(); R = null; go(); }
+async function onSync(p) {   // only the current host answers, with everything a newcomer needs
+  if (p.id === myId || !R || hostOf(players) !== myId) return;
+  const { seen, revealed, endAt, done, v, ...rd } = R, roundId = R.roundId;
+  await send("round", rd);
+  await send("seen", { roundId, ids: [...seen] });
+  if (endAt) await send("timer", { roundId, endAt });
+  if (revealed) await send("reveal", { roundId });
+}
+
+// ---- host: start a round from the host's own pool/options ----
+function startRound() {
+  const ids = order(players);
+  const p = pool();
+  if (ids.length < 3 || !p.length) return send("lobby", {});
+  n = ids.length; syncImp();
+  let pick;
+  do pick = p[rnd(p.length)]; while (pick.w === lastWord && p.length > 1);
+  lastWord = pick.w;
+  const reds = [...pickReds(n, nImp)].map(k => ids[k]);
+  send("round", {
+    roundId: Date.now().toString(36) + rnd(1e6).toString(36), lang,
+    players: ids.map(id => ({ id, name: players[id].name })), reds, word: pick.w,
+    cat: CATS.find(c => c.id === pick.c)[lang],
+    opts: { cat: !!opts.cat, first: !!opts.first, timer: opts.timer },
+    firstId: opts.first ? ids[rnd(n)] : null,
+  });
+}
+
+// ---- rendering ----
+function go() {
+  if (!ch) return;
+  if (R) { show("ogame"); gameRender(); } else { show("room"); lobbyRender(); }
+}
+
+function lobbyRender() {
+  const ids = order(players), host = hostOf(players) === myId;
+  $("rcode").textContent = code;
+  $("plabel").textContent = t("playersN", ids.length);
+  $("plist").innerHTML = ids.map(id => `<div class="pl"><span>${esc(players[id].name)}${id === myId ? ` <small>${esc(t("you"))}</small>` : ""}</span>${id === ids[0] ? `<small class="hb">${esc(t("host"))}</small>` : ""}</div>`).join("");
+  $("only").hidden = !(joining && ids.length <= 1 && Date.now() - joinedAt > 3000);
+  $("wait").hidden = host; $("cfg").hidden = !host;
+  $("ostart").hidden = !host; $("ostart").disabled = ids.length < 3;
+  $("need").hidden = !host || ids.length >= 3;
+  if (host) { n = ids.length; syncImp(); }
+}
+
+function cardRender() {
+  const c = $("ocard"), red = R.reds.includes(myId);
+  if (R.v === 0) { c.className = ""; c.innerHTML = `${esc(myName)}<small>${esc(t("tapSee"))}</small>`; }
+  else if (R.v === 2) { c.className = ""; c.textContent = t("tapAgain"); }
+  else {
+    c.className = red ? "red" : "blue";
+    c.innerHTML = red
+      ? `<span class="word">${esc(t("imposter"))}</span>${R.opts.cat ? `<small>${esc(t("category", R.cat))}</small>` : ""}<small>${esc(t("blend"))}</small>`
+      : `<small>${esc(t("wordIs"))}</small><span class="word">${esc(R.word)}</span><small>${esc(t("tapHide"))}</small>`;
+  }
+}
+
+function otick() {
+  if (!R?.endAt) return;
+  const s = Math.ceil((R.endAt - Date.now()) / 1000);   // ponytail: trusts host clock, ±few s skew between phones
+  if (s > 0) { $("oclock").textContent = mmss(s); return; }
+  stopT(); R.done = true;
+  $("oclock").textContent = t("timesUp"); $("oclock").className = "up";
+  try { navigator.vibrate?.([500, 200, 500, 200, 500]); } catch {}
+}
+
+function gameRender() {
+  const host = hostOf(players) === myId, me = R.players.some(p => p.id === myId);
+  const nameOf = id => R.players.find(p => p.id === id)?.name ?? "";
+  const act = R.players.filter(p => players[p.id]), seenN = act.filter(p => R.seen.has(p.id)).length;   // absent players don't block "all seen"
+  $("seen").textContent = t("seen", seenN, act.length);
+  $("ogame").classList.toggle("rev", R.revealed);
+  $("ocard").hidden = R.revealed || !me;
+  $("onot").hidden = R.revealed || me;
+  if (me && !R.revealed) cardRender();
+  const showFirst = !R.revealed && R.opts.first && R.firstId && act.length > 0 && seenN >= act.length;
+  $("ofirst").hidden = !showFirst;
+  if (showFirst) $("ofirst").textContent = t("starts", nameOf(R.firstId));
+  const clk = $("oclock");
+  clk.hidden = R.revealed || !R.opts.timer;
+  if (R.revealed) stopT();
+  else if (!R.endAt) { clk.textContent = mmss(R.opts.timer * 60); clk.className = ""; }
+  else if (R.done) { clk.textContent = t("timesUp"); clk.className = "up"; }
+  else if (!timerId) { timerId = setInterval(otick, 250); otick(); }
+  $("otstart").hidden = !(host && R.opts.timer && !R.endAt && !R.revealed);
+  $("oreveal").hidden = !host || R.revealed;
+  $("opost").hidden = !(host && R.revealed);
+  $("owaitp").hidden = host || !R.revealed;
+  $("owordline").hidden = $("oimpline").hidden = !R.revealed;
+  if (R.revealed) {
+    const imps = R.reds.map(nameOf);
+    $("owordline").innerHTML = `${esc(t("wasWord"))}<b>${esc(R.word)}</b>`;
+    $("oimpline").innerHTML = `${esc(t("impLabel", imps.length))}: <b>${esc(imps.join(", "))}</b>`;
+  }
+}
+
+// ---- wiring ----
+$("create").onclick = () => enter(genCode(), true);
+$("join").onclick = () => enter($("code").value.trim().toUpperCase(), false);
+$("code").oninput = () => { $("code").value = $("code").value.toUpperCase().replace(/[^A-Z]/g, ""); err(""); };
+$("name").oninput = () => { err(""); saveJ("name", $("name").value.trim().slice(0, 16)); };
+$("local").onclick = () => {
+  $("setup").insertBefore($("cfg"), $("start")); $("cfg").hidden = false; $("optNamesRow").hidden = false;
+  setN(n); show("setup");
+};
+$("tohome").onclick = () => show("home");
+$("leave").onclick = $("oleave").onclick = leave;
+$("ostart").onclick = startRound;
+$("copy").onclick = async () => {
+  const url = location.href.split(/[?#]/)[0] + "?room=" + code;
+  try {
+    await navigator.clipboard.writeText(url);
+    $("copy").textContent = t("copied"); setTimeout(() => $("copy").textContent = t("copyLink"), 1500);
+  } catch { $("link").hidden = false; $("link").value = url; $("link").select(); }
+};
+$("ocard").onclick = () => {
+  if (obusy || !R) return;
+  if (R.v === 1) R.v = 2;
+  else {
+    R.v = 1; obusy = true; setTimeout(() => obusy = false, 400);   // stops a double-tap hiding the color instantly
+    if (!R.seen.has(myId)) send("seen", { id: myId, roundId: R.roundId });
+  }
+  cardRender();
+};
+$("otstart").onclick = () => send("timer", { roundId: R.roundId, endAt: Date.now() + R.opts.timer * 60000 });
+$("oreveal").onclick = () => send("reveal", { roundId: R.roundId });
+$("oback").onclick = () => send("lobby", {});
+$("okeep").onclick = startRound;
+$("orm").onclick = () => {
+  const ex = R.lang === lang ? excluded : load("excluded_" + R.lang);
+  ex.add(R.word); save("excluded_" + R.lang, ex); render();
+  startRound();
+};
+
+function initHome() {
+  $("name").value = loadJ("name", "");
+  const r = (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  if (r) { $("code").value = r; $("name").focus(); }
+  show("home");
+}
+
+setLang(lang);
+initHome();
+navigator.wakeLock?.request("screen").catch(() => {});
+</script>
+</body>
+</html>
