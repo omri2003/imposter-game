@@ -81,7 +81,7 @@
   .go:disabled { opacity: .35; }
   .cfg { display: flex; flex-direction: column; gap: 16px; }
   .cj { display: flex; gap: 8px; }
-  #code { flex: 1 1 140px; min-width: 0; width: auto; height: 52px; direction: ltr; text-align: center; text-transform: uppercase; letter-spacing: .3em; font-size: 1.4rem; font-weight: 800; }
+  #code { flex: none; min-width: 0; width: 100%; box-sizing: border-box; height: 52px; direction: ltr; text-align: center; text-transform: uppercase; letter-spacing: .3em; font-size: 1.4rem; font-weight: 800; }
   .cj { flex-wrap: wrap; } .cj .tonal { padding: 0 20px; flex: 1 0 auto; }
   #tbox, #post, #opost { display: flex; flex-direction: column; gap: 8px; }
   #tbox { gap: 12px; }
@@ -124,20 +124,11 @@
   </div>
   <div id="normal" style="display:contents">
     <section class="sec">
-      <h2 class="label" data-t="hostGame"></h2>
-      <div class="card"><button class="go" id="create" data-t="create"></button></div>
+      <label class="label" for="code" data-t="codeHint"></label>
+      <input class="nm" id="code" maxlength="4" data-ph="codePh" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <p class="hint err" id="errCode" hidden></p>
     </section>
-    <section class="sec">
-      <h2 class="label" data-t="joinGame"></h2>
-      <div class="card">
-        <label class="label" for="code" data-t="roomCode"></label>
-        <div class="cj">
-          <input class="nm" id="code" maxlength="4" data-ph="codePh" autocapitalize="characters" autocomplete="off" spellcheck="false">
-          <button class="tonal" id="join" data-t="join"></button>
-        </div>
-        <p class="hint err" id="errCode" hidden></p>
-      </div>
-    </section>
+    <button class="go" id="create"></button>
   </div>
   <p class="hint err" id="errNet" hidden></p>
   <button class="txt" id="local" data-t="onePhone"></button>
@@ -285,7 +276,7 @@ const UI = {
     impLabel: k => k > 1 ? "Imposters" : "Imposter", removeQ: "Remove this round's word from the list?",
     rm: "Remove word · play again", keep: "Keep word · play again", quit: "‹ Back to setup", namePh: "e.g. Dana", codePh: "ABCD", hostGame: "Host a game", joinGame: "Join a game",
     joinRoomN: c => `Join room ${c}`, hostInstead: "Host a new room instead", scan: "Scan to join", backLbl: "Back",
-    yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join room",
+    codeHint: "Room code · leave empty to host", yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join room",
     onePhone: "Play on one phone", back: "‹", leave: "‹ Leave room", copyLink: "Copy invite link", copied: "Copied",
     playersN: k => `Players (${k})`, you: "you", host: "host", waiting: "Waiting for host…", need3: "Need at least 3 players",
     only: "Nobody else here yet — check the code", errName: "Enter your name", errCode: "Enter a 4-letter room code",
@@ -302,7 +293,7 @@ const UI = {
     impLabel: k => k > 1 ? "המתחזים" : "המתחזה", removeQ: "להסיר את המילה של הסיבוב מהרשימה?",
     rm: "הסר מילה · משחק חדש", keep: "השאר מילה · משחק חדש", quit: "› חזרה להגדרות", namePh: "למשל דנה", codePh: "ABCD", hostGame: "אירוח משחק", joinGame: "הצטרפות למשחק",
     joinRoomN: c => `הצטרפות לחדר ${c}`, hostInstead: "לפתוח חדר חדש במקום", scan: "סרקו כדי להצטרף", backLbl: "חזרה",
-    yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף לחדר",
+    codeHint: "קוד חדר · השאירו ריק כדי לפתוח חדר", yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף לחדר",
     onePhone: "משחקים על טלפון אחד", back: "›", leave: "› יציאה מהחדר", copyLink: "העתק קישור הזמנה", copied: "הועתק",
     playersN: k => `שחקנים (${k})`, you: "את/ה", host: "מארח/ת", waiting: "ממתינים למארח…", need3: "צריך לפחות 3 שחקנים",
     only: "עדיין אין כאן אף אחד — בדקו את הקוד", errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
@@ -383,8 +374,10 @@ function setLang(l) {
   $("tohome").setAttribute("aria-label", t("backLbl")); $("invT").textContent = t("joinRoomN", inviteCode);
   document.querySelectorAll(".langs").forEach(el => el.innerHTML = [["en", "English"], ["he", "עברית"]].map(([k, v]) =>
     `<button class="chip" data-l="${k}" aria-pressed="${lang === k}">${v}</button>`).join(""));
-  syncOpts(); $("n").textContent = n; syncImp(); render(); go();
+  syncOpts(); $("n").textContent = n; syncImp(); render(); go(); mainLbl();
 }
+// One main button: empty code = host a new room, any code = join it
+function mainLbl() { const c = $("code").value; $("create").textContent = c ? t("joinRoomN", c) : t("create"); }
 
 function render() {
   $("cats").innerHTML = CATS.map(c =>
@@ -686,11 +679,10 @@ function gameRender() {
 }
 
 // ---- wiring ----
-$("create").onclick = () => enter(genCode(), true);
-$("join").onclick = () => enter($("code").value.trim().toUpperCase(), false);
+$("create").onclick = () => { const c = $("code").value.trim().toUpperCase(); c ? enter(c, false) : enter(genCode(), true); };
 $("joinInv").onclick = () => enter(inviteCode, false);
-$("hostNew").onclick = () => { inviteCode = ""; $("inv").hidden = true; $("normal").hidden = false; };
-$("code").oninput = () => { $("code").value = $("code").value.toUpperCase().replace(/[^A-Z]/g, ""); err(""); };
+$("hostNew").onclick = () => { inviteCode = ""; $("code").value = ""; mainLbl(); $("inv").hidden = true; $("normal").hidden = false; };
+$("code").oninput = () => { $("code").value = $("code").value.toUpperCase().replace(/[^A-Z]/g, ""); err(""); mainLbl(); };
 $("name").oninput = () => { err(""); saveJ("name", $("name").value.trim().slice(0, 16)); };
 $("local").onclick = () => {
   $("setup").insertBefore($("cfg"), $("start")); $("cfg").hidden = false; $("optNamesRow").hidden = false;
