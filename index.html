@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Imposter</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
   /* Layout: one centered column, a single big tap card per player. Single dark "game night" look. */
@@ -12,6 +13,7 @@
     color-scheme: dark;
     --bg: #14131a; --fg: #f1eff7; --muted: #8d8a9c; --line: #2a2833;
     --blue: #2f6bff; --red: #ff3b4a; --gray: #3a3844;
+    --tonal: #26242e; --surface: #1d1b25; --accent: #7aa2ff;
     --display: "Bricolage Grotesque", system-ui, sans-serif;
   }
   [hidden] { display: none !important; }
@@ -33,12 +35,17 @@
   .stepper button { width: 64px; height: 64px; font-size: 2rem; border-radius: 12px; background: var(--line); color: var(--fg); border: 0; }
   .hint { color: var(--muted); font-size: .95rem; margin: 0; }
   .go { height: 64px; border: 0; border-radius: 16px; background: var(--fg); color: var(--bg); font: 800 1.3rem var(--display); }
-  .ghost { height: 52px; border: 1px solid var(--line); border-radius: 16px; background: none; color: var(--muted); font: 500 1rem var(--display); }
+  .tonal { min-height: 52px; border: 0; border-radius: 16px; background: var(--tonal); color: var(--fg); font: 500 1rem var(--display); }
+  .txt { min-height: 48px; min-width: 48px; padding: 0 8px; border: 0; background: none; color: var(--accent); font: 500 1rem var(--display); align-self: flex-start; }
+  .card { background: var(--surface); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .sec { display: flex; flex-direction: column; gap: 8px; }
+  h2.label { margin: 0; font-weight: 500; }
+  .err { color: var(--red); margin: 0; }
   button:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
   .row { display: flex; justify-content: space-between; align-items: baseline; }
   .count { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font: 500 .95rem var(--display); }
+  .chip { height: 48px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font: 500 .95rem var(--display); }
   .chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
   #q, .nm { height: 48px; border: 1px solid var(--line); border-radius: 12px; background: none; color: var(--fg); font: 500 1rem var(--display); padding: 0 14px; -webkit-user-select: text; user-select: text; }
   #words { max-height: 40vh; min-height: 120px; overflow-y: auto; border: 1px solid var(--line); border-radius: 16px; }
@@ -72,16 +79,22 @@
   #wordline b, #impline b, #owordline b, #oimpline b { display: block; font-size: 2.4rem; line-height: 1.1; }
   #impline, #oimpline { text-align: center; color: var(--red); font-size: 1.1rem; }
   .go:disabled { opacity: .35; }
-  .err { color: var(--red); }
   .cfg { display: flex; flex-direction: column; gap: 16px; }
   .cj { display: flex; gap: 8px; }
-  #code { flex: 1; min-width: 0; width: auto; height: 64px; direction: ltr; text-align: center; text-transform: uppercase; letter-spacing: .3em; font-size: 1.4rem; font-weight: 800; }
-  .cj .go { padding: 0 24px; }
-  #rcode { font-size: 4.5rem; font-weight: 800; letter-spacing: .12em; text-align: center; direction: ltr; -webkit-user-select: text; user-select: text; }
-  #plist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; }
-  .pl { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 1.05rem; }
+  #code { flex: 1 1 140px; min-width: 0; width: auto; height: 52px; direction: ltr; text-align: center; text-transform: uppercase; letter-spacing: .3em; font-size: 1.4rem; font-weight: 800; }
+  .cj { flex-wrap: wrap; } .cj .tonal { padding: 0 20px; flex: 1 0 auto; }
+  #tbox, #post, #opost { display: flex; flex-direction: column; gap: 8px; }
+  #tbox { gap: 12px; }
+  #rcode, #invcode { font-size: 3.5rem; font-weight: 800; letter-spacing: .12em; text-align: center; direction: ltr; -webkit-user-select: text; user-select: text; }
+  #plist { padding: 4px 16px; gap: 0; }
+  .pl { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 48px; border-bottom: 1px solid var(--line); font-size: 1.05rem; }
   .pl:last-child { border-bottom: 0; }
-  .pl small { color: var(--muted); } .pl .hb { color: var(--blue); }
+  .pl small { color: var(--muted); font-size: .9rem; }
+  .qr { width: min(220px, 100%); aspect-ratio: 1; align-self: center; background: #fff; border-radius: 16px; overflow: hidden; }
+  .qr svg { display: block; width: 100%; height: 100%; }
+  .ctr { align-items: center; text-align: center; }
+  .ctr > .tonal, .ctr > .nm, .ctr > .go { align-self: stretch; }
+  .bot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
   #obelow { display: flex; flex-direction: column; gap: 12px; }
   #ogame.rev #obelow { flex: 1; justify-content: center; }
   #ogame, #room { height: auto; min-height: 100%; }
@@ -94,18 +107,44 @@
 <main id="home">
   <h1>Imp<span>o</span>ster</h1>
   <div class="chips langs"></div>
-  <input class="nm" id="name" maxlength="16" data-ph="yourName" autocomplete="off">
-  <button class="go" id="create" data-t="create"></button>
-  <div class="label" data-t="orJoin"></div>
-  <div class="cj">
-    <input class="nm" id="code" maxlength="4" data-ph="roomCode" autocapitalize="characters" autocomplete="off" spellcheck="false">
-    <button class="go" id="join" data-t="join"></button>
+  <div class="sec">
+    <label class="label" for="name" data-t="yourName"></label>
+    <input class="nm" id="name" maxlength="16" data-ph="namePh" autocomplete="off">
+    <p class="hint err" id="errName" hidden></p>
   </div>
-  <p class="hint err" id="err" hidden></p>
-  <button class="ghost" id="local" data-t="onePhone"></button>
+  <div id="inv" hidden>
+    <section class="sec">
+      <h2 class="label" id="invT"></h2>
+      <div class="card ctr">
+        <div id="invcode"></div>
+        <button class="go" id="joinInv" data-t="join"></button>
+      </div>
+    </section>
+    <button class="txt" id="hostNew" data-t="hostInstead"></button>
+  </div>
+  <div id="normal" style="display:contents">
+    <section class="sec">
+      <h2 class="label" data-t="hostGame"></h2>
+      <div class="card"><button class="go" id="create" data-t="create"></button></div>
+    </section>
+    <section class="sec">
+      <h2 class="label" data-t="joinGame"></h2>
+      <div class="card">
+        <label class="label" for="code" data-t="roomCode"></label>
+        <div class="cj">
+          <input class="nm" id="code" maxlength="4" data-ph="codePh" autocapitalize="characters" autocomplete="off" spellcheck="false">
+          <button class="tonal" id="join" data-t="join"></button>
+        </div>
+        <p class="hint err" id="errCode" hidden></p>
+      </div>
+    </section>
+  </div>
+  <p class="hint err" id="errNet" hidden></p>
+  <button class="txt" id="local" data-t="onePhone"></button>
 </main>
 
 <main id="setup" hidden>
+  <button class="txt" id="tohome" data-t="back"></button>
   <h1>Imp<span>o</span>ster</h1>
   <div class="chips langs"></div>
   <div class="label" data-t="players"></div>
@@ -140,24 +179,32 @@
     <div id="words"></div>
   </div>
   <button class="go" id="start" data-t="start"></button>
-  <button class="ghost" id="tohome" data-t="back"></button>
 </main>
 
 <main id="room" hidden>
-  <div class="row"><span class="label" data-t="roomCode"></span><button class="chip" id="leave" data-t="leave"></button></div>
-  <div id="rcode"></div>
-  <button class="ghost" id="copy" data-t="copyLink"></button>
-  <input class="nm" id="link" readonly hidden aria-label="link">
-  <div class="label" id="plabel"></div>
-  <div id="plist"></div>
+  <button class="txt" id="leave" data-t="leave"></button>
+  <div class="card ctr">
+    <div class="qr" id="qrbox" role="img" hidden></div>
+    <div class="hint" id="qrcap" data-t="scan" hidden></div>
+    <div id="rcode"></div>
+    <button class="tonal" id="copy" data-t="copyLink"></button>
+    <input class="nm" id="link" readonly hidden aria-label="link">
+  </div>
+  <section class="sec">
+    <h2 class="label" id="plabel"></h2>
+    <div class="card" id="plist"></div>
+  </section>
   <p class="hint" id="only" hidden data-t="only"></p>
   <p class="hint" id="wait" hidden data-t="waiting"></p>
   <div id="cfgslot"></div>
-  <button class="go" id="ostart" data-t="start" hidden></button>
-  <p class="hint" id="need" hidden data-t="need3"></p>
+  <div class="bot">
+    <p class="hint" id="need" hidden data-t="need3"></p>
+    <button class="go" id="ostart" data-t="start" hidden></button>
+  </div>
 </main>
 
 <main id="ogame" hidden>
+  <button class="txt" id="oleave" data-t="leave"></button>
   <div class="row"><span class="label" data-t="roundLbl"></span><span class="count" id="seen"></span></div>
   <button id="ocard"></button>
   <p class="endq" id="onot" hidden data-t="inProgress"></p>
@@ -166,38 +213,37 @@
     <div id="oclock" hidden></div>
     <div id="owordline" hidden></div>
     <div id="oimpline" hidden></div>
-    <button class="ghost" id="otstart" data-t="startTimer" hidden></button>
+    <button class="tonal" id="otstart" data-t="startTimer" hidden></button>
     <button class="go" id="oreveal" data-t="reveal" hidden></button>
     <div id="opost" hidden>
       <p class="endq" data-t="removeQ"></p>
-      <button class="go" id="orm" data-t="rmN" style="width:100%"></button>
-      <button class="ghost" id="okeep" data-t="keepN" style="width:100%;margin-top:12px"></button>
-      <button class="ghost" id="oback" data-t="toLobby" style="width:100%;margin-top:12px"></button>
+      <button class="go" id="orm" data-t="rmN"></button>
+      <button class="tonal" id="okeep" data-t="keepN"></button>
+      <button class="txt" id="oback" data-t="toLobby"></button>
     </div>
     <p class="hint" id="owaitp" hidden data-t="waiting"></p>
   </div>
-  <button class="ghost" id="oleave" data-t="leave"></button>
 </main>
 
 <main id="game" hidden>
+  <button class="txt" id="quit" data-t="quit"></button>
   <div class="row"><span class="label" data-t="pass"></span><span class="count" id="left"></span></div>
   <button id="card"></button>
   <div id="end" hidden>
     <div id="first" hidden></div>
     <div id="tbox" hidden>
       <div id="clock"></div>
-      <button class="ghost" id="tstart" data-t="startTimer" style="width:100%"></button>
+      <button class="tonal" id="tstart" data-t="startTimer"></button>
     </div>
     <button class="go" id="reveal" data-t="reveal"></button>
     <div id="post" hidden>
       <div id="wordline"></div>
       <div id="impline"></div>
       <p class="endq" data-t="removeQ"></p>
-      <button class="go" id="rm" data-t="rm" style="width:100%"></button>
-      <button class="ghost" id="keep" data-t="keep" style="width:100%;margin-top:12px"></button>
+      <button class="go" id="rm" data-t="rm"></button>
+      <button class="tonal" id="keep" data-t="keep"></button>
     </div>
   </div>
-  <button class="ghost" id="quit" data-t="quit"></button>
 </main>
 
 <script>
@@ -232,14 +278,15 @@ const UI = {
   en: { players: "Players", imposters: "Imposters", options: "Options", cats: "Categories", words: "Words", search: "Search words",
     split: (b, r) => `${b} blue · ${r} red`, noMatch: "No word matches your search", turnOn: "Turn on a category",
     inPlay: p => `${p} in play`, none: "No words in play", optCat: "Imposter sees the category", optFirst: "Random first speaker",
-    optNames: "Player names", optTimer: "Discussion timer", off: "Off", min: m => `${m} min`, start: "Start", pass: "Pass the phone",
+    optNames: "Player names", optTimer: "Discussion timer", off: "Off", min: m => `${m} min`, start: "Start round", pass: "Pass the phone",
     left: k => `${k} left`, playerN: k => `Player ${k}`, passPhone: "Pass the phone · ", tapSee: "Tap to see your color",
     imposter: "IMPOSTER", blend: "Blend in · tap to hide", wordIs: "The word is", tapHide: "Tap to hide", category: c => `Category: ${c}`,
     starts: p => `${p} starts`, startTimer: "Start timer", timesUp: "Time's up — vote!", reveal: "Reveal", wasWord: "The word was",
     impLabel: k => k > 1 ? "Imposters" : "Imposter", removeQ: "Remove this round's word from the list?",
-    rm: "Remove word · play again", keep: "Keep word · play again", quit: "Back to setup",
-    yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join",
-    onePhone: "Play on one phone", back: "Back", leave: "Leave", copyLink: "Copy invite link", copied: "Copied",
+    rm: "Remove word · play again", keep: "Keep word · play again", quit: "‹ Back to setup", namePh: "e.g. Dana", codePh: "ABCD", hostGame: "Host a game", joinGame: "Join a game",
+    joinRoomN: c => `Join room ${c}`, hostInstead: "Host a new room instead", scan: "Scan to join", backLbl: "Back",
+    yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join room",
+    onePhone: "Play on one phone", back: "‹", leave: "‹ Leave room", copyLink: "Copy invite link", copied: "Copied",
     playersN: k => `Players (${k})`, you: "you", host: "host", waiting: "Waiting for host…", need3: "Need at least 3 players",
     only: "Nobody else here yet — check the code", errName: "Enter your name", errCode: "Enter a 4-letter room code",
     noNet: "Can't reach the online service. One-phone mode still works.", seen: (a, b) => `Seen ${a}/${b}`, roundLbl: "Round",
@@ -248,14 +295,15 @@ const UI = {
   he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
     split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
     inPlay: p => `${p} במשחק`, none: "אין מילים במשחק", optCat: "המתחזה רואה את הקטגוריה", optFirst: "דובר ראשון אקראי",
-    optNames: "שמות שחקנים", optTimer: "טיימר דיון", off: "כבוי", min: m => `${m} דק׳`, start: "התחל", pass: "מעבירים את הטלפון",
+    optNames: "שמות שחקנים", optTimer: "טיימר דיון", off: "כבוי", min: m => `${m} דק׳`, start: "התחל סיבוב", pass: "מעבירים את הטלפון",
     left: k => `נשארו ${k}`, playerN: k => `שחקן ${k}`, passPhone: "העבר את הטלפון · ", tapSee: "הקש כדי לראות את הצבע",
     imposter: "מתחזה", blend: "תשתלב · הקש להסתרה", wordIs: "המילה היא", tapHide: "הקש להסתרה", category: c => `קטגוריה: ${c}`,
     starts: p => `${p} מתחיל/ה`, startTimer: "התחל טיימר", timesUp: "נגמר הזמן — מצביעים!", reveal: "חשוף", wasWord: "המילה הייתה",
     impLabel: k => k > 1 ? "המתחזים" : "המתחזה", removeQ: "להסיר את המילה של הסיבוב מהרשימה?",
-    rm: "הסר מילה · משחק חדש", keep: "השאר מילה · משחק חדש", quit: "חזרה להגדרות",
-    yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף",
-    onePhone: "משחקים על טלפון אחד", back: "חזרה", leave: "יציאה", copyLink: "העתק קישור הזמנה", copied: "הועתק",
+    rm: "הסר מילה · משחק חדש", keep: "השאר מילה · משחק חדש", quit: "› חזרה להגדרות", namePh: "למשל דנה", codePh: "ABCD", hostGame: "אירוח משחק", joinGame: "הצטרפות למשחק",
+    joinRoomN: c => `הצטרפות לחדר ${c}`, hostInstead: "לפתוח חדר חדש במקום", scan: "סרקו כדי להצטרף", backLbl: "חזרה",
+    yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף לחדר",
+    onePhone: "משחקים על טלפון אחד", back: "›", leave: "› יציאה מהחדר", copyLink: "העתק קישור הזמנה", copied: "הועתק",
     playersN: k => `שחקנים (${k})`, you: "את/ה", host: "מארח/ת", waiting: "ממתינים למארח…", need3: "צריך לפחות 3 שחקנים",
     only: "עדיין אין כאן אף אחד — בדקו את הקוד", errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
     noNet: "אין חיבור לשירות המקוון. אפשר עדיין לשחק על טלפון אחד.", seen: (a, b) => `ראו ${a}/${b}`, roundLbl: "סיבוב",
@@ -331,7 +379,8 @@ function setLang(l) {
   document.documentElement.lang = l; document.documentElement.dir = l === "he" ? "rtl" : "ltr";
   excluded = load("excluded_" + l);
   document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t));
-  document.querySelectorAll("[data-ph]").forEach(el => { el.placeholder = t(el.dataset.ph); el.setAttribute("aria-label", t(el.dataset.ph)); });
+  document.querySelectorAll("[data-ph]").forEach(el => { el.placeholder = t(el.dataset.ph); if (!el.labels.length) el.setAttribute("aria-label", t(el.dataset.ph)); });
+  $("tohome").setAttribute("aria-label", t("backLbl")); $("invT").textContent = t("joinRoomN", inviteCode);
   document.querySelectorAll(".langs").forEach(el => el.innerHTML = [["en", "English"], ["he", "עברית"]].map(([k, v]) =>
     `<button class="chip" data-l="${k}" aria-pressed="${lang === k}">${v}</button>`).join(""));
   syncOpts(); $("n").textContent = n; syncImp(); render(); go();
@@ -447,7 +496,7 @@ const SB_URL = "https://rmmojdxoodamrumenitm.supabase.co";
 const SB_KEY = "sb_publishable_z5t-Ln7K7GrzVK4SvMNnPg_PdVyC9g_";
 const SB_LEGACY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbW9qZHhvb2RhbXJ1bWVuaXRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNDI5NDYsImV4cCI6MjEwNzcxODk0Nn0.gbfYDuiSMld5qh9rIarlW9tOuWMb4wGpN0ehCvafMFQ";
 const KEYS = [SB_KEY, SB_LEGACY];   // publishable key first, legacy anon key if realtime rejects it
-let ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false;
+let inviteCode = "", qrFor = "", ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false;
 // R = current round: the "round" payload + seen:Set, revealed, endAt, done, v (0 hidden / 1 showing / 2 gray). Every client keeps it, so any can become host.
 const myId = (() => {
   let v = loadJ("myId", "");
@@ -460,7 +509,16 @@ const order = ps => Object.keys(ps).sort((a, b) => ps[a].joinedAt - ps[b].joined
 const hostOf = ps => order(ps)[0];
 const genCode = () => { const A = "ABCDEFGHJKMNPQRSTUVWXYZ"; return Array.from({ length: 4 }, () => A[rnd(A.length)]).join(""); };   // no I, O, L; ponytail: no collision check, 23^4 codes
 const send = (event, payload) => ch?.send({ type: "broadcast", event, payload });
-const err = k => { $("err").textContent = k ? t(k) : ""; $("err").hidden = !k; };
+const err = k => { for (const [id, key] of [["errName", "errName"], ["errCode", "errCode"], ["errNet", "noNet"]]) { $(id).textContent = k === key ? t(k) : ""; $(id).hidden = k !== key; } };
+const inviteUrl = () => location.href.split(/[?#]/)[0] + "?room=" + code;
+// dark modules on white with a 4-module quiet zone, so it scans even in the dark theme; "" if the library didn't load
+function qrSvg(url) {
+  if (!window.qrcode) return "";
+  const q = qrcode(0, "M"); q.addData(url); q.make();
+  const k = q.getModuleCount(); let d = "";
+  for (let r = 0; r < k; r++) for (let c = 0; c < k; c++) if (q.isDark(r, c)) d += `M${c + 4} ${r + 4}h1v1h-1z`;
+  return `<svg viewBox="0 0 ${k + 8} ${k + 8}" shape-rendering="crispEdges" aria-hidden="true"><rect width="${k + 8}" height="${k + 8}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
 
 function client() {
   while (!cli && window.supabase && ki < KEYS.length) { try { cli = supabase.createClient(SB_URL, KEYS[ki]); } catch { ki++; } }
@@ -563,7 +621,12 @@ function lobbyRender() {
   const ids = order(players), host = hostOf(players) === myId;
   $("rcode").textContent = code;
   $("plabel").textContent = t("playersN", ids.length);
-  $("plist").innerHTML = ids.map(id => `<div class="pl"><span>${esc(players[id].name)}${id === myId ? ` <small>${esc(t("you"))}</small>` : ""}</span>${id === ids[0] ? `<small class="hb">${esc(t("host"))}</small>` : ""}</div>`).join("");
+  $("plist").innerHTML = ids.map(id => `<div class="pl"><span>${esc(players[id].name)}</span><small>${esc([id === myId && t("you"), id === ids[0] && t("host")].filter(Boolean).join(" · "))}</small></div>`).join("");
+  if (qrFor !== code) {
+    qrFor = code; $("qrbox").innerHTML = qrSvg(inviteUrl());
+    $("qrbox").hidden = $("qrcap").hidden = !$("qrbox").firstChild;
+  }
+  $("qrbox").setAttribute("aria-label", t("scan"));
   $("only").hidden = !(joining && ids.length <= 1 && Date.now() - joinedAt > 3000);
   $("wait").hidden = host; $("cfg").hidden = !host;
   $("ostart").hidden = !host; $("ostart").disabled = ids.length < 3;
@@ -625,6 +688,8 @@ function gameRender() {
 // ---- wiring ----
 $("create").onclick = () => enter(genCode(), true);
 $("join").onclick = () => enter($("code").value.trim().toUpperCase(), false);
+$("joinInv").onclick = () => enter(inviteCode, false);
+$("hostNew").onclick = () => { inviteCode = ""; $("inv").hidden = true; $("normal").hidden = false; };
 $("code").oninput = () => { $("code").value = $("code").value.toUpperCase().replace(/[^A-Z]/g, ""); err(""); };
 $("name").oninput = () => { err(""); saveJ("name", $("name").value.trim().slice(0, 16)); };
 $("local").onclick = () => {
@@ -635,7 +700,7 @@ $("tohome").onclick = () => show("home");
 $("leave").onclick = $("oleave").onclick = leave;
 $("ostart").onclick = startRound;
 $("copy").onclick = async () => {
-  const url = location.href.split(/[?#]/)[0] + "?room=" + code;
+  const url = inviteUrl();
   try {
     await navigator.clipboard.writeText(url);
     $("copy").textContent = t("copied"); setTimeout(() => $("copy").textContent = t("copyLink"), 1500);
@@ -663,7 +728,7 @@ $("orm").onclick = () => {
 function initHome() {
   $("name").value = loadJ("name", "");
   const r = (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
-  if (r) { $("code").value = r; $("name").focus(); }
+  if (r) { inviteCode = r; $("code").value = r; $("invcode").textContent = r; $("inv").hidden = false; $("normal").hidden = true; $("invT").textContent = t("joinRoomN", r); $("name").focus(); }
   show("home");
 }
 
