@@ -103,7 +103,13 @@
   #obelow { display: flex; flex-direction: column; gap: 12px; }
   #ogame.rev #obelow { flex: 1; justify-content: center; }
   #ogame, #room { height: auto; min-height: 100%; }
-  #ogame { height: 100%; }
+  .vrow { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 0 16px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 16px; background: none; color: var(--fg); font: 500 1.1rem var(--display); text-align: start; }
+  .vrow i { flex: none; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--muted); }
+  .vrow[aria-pressed="true"] { border-color: var(--accent); background: var(--surface); }
+  .vrow[aria-pressed="true"] i { background: var(--accent); border-color: var(--accent); }
+  .pts { font-variant-numeric: tabular-nums; font-weight: 800; }
+  .vl { padding: 4px 16px; gap: 0; }
+  #gtext, #resline { overflow-wrap: anywhere; }
   @media (prefers-reduced-motion: reduce) { #clock.up, #oclock.up { animation: none; } }
 </style>
 </head>
@@ -200,6 +206,10 @@
     <div class="card" id="plist"></div>
   </section>
   <p class="hint" id="wait" hidden data-t="waiting"></p>
+  <section class="sec" id="lscores" hidden>
+    <h2 class="label" data-t="scores"></h2>
+    <div class="card vl" id="lscorelist"></div>
+  </section>
   <div id="cfgslot"></div>
   <div class="bot">
     <p class="hint" id="need" hidden data-t="need3"></p>
@@ -218,7 +228,35 @@
     <div id="owordline" hidden></div>
     <div id="oimpline" hidden></div>
     <button class="tonal" id="otstart" data-t="startTimer" hidden></button>
-    <button class="go" id="oreveal" data-t="reveal" hidden></button>
+    <button class="go" id="ovstart" data-t="startVote" hidden></button>
+    <button class="txt" id="oreveal" data-t="revealNoVote" hidden></button>
+    <section class="sec" id="ovote" hidden>
+      <p class="endq" data-t="voteQ"></p>
+      <div class="sec" id="vlist"></div>
+      <button class="tonal" id="oendvote" data-t="endVote" hidden></button>
+    </section>
+    <section class="sec" id="oguess" hidden>
+      <p class="endq" id="gwho"></p>
+      <div class="sec" id="gform">
+        <label class="label" for="gin" data-t="guessLbl"></label>
+        <input class="nm" id="gin" maxlength="40" autocomplete="off">
+        <button class="go" id="gsend" data-t="sendGuess"></button>
+      </div>
+      <div class="sec" id="ojudge">
+        <button class="go" id="ocorrect" data-t="correct"></button>
+        <button class="tonal" id="owrong" data-t="wrong"></button>
+      </div>
+      <p class="hint" id="gwait" data-t="judging"></p>
+    </section>
+    <p class="endq" id="gtext" hidden></p>
+    <div class="sec" id="ores" hidden>
+      <p class="endq" id="resline"></p>
+      <section class="sec" id="vsec"><h2 class="label" data-t="votesLbl"></h2><div class="card vl" id="vlog"></div></section>
+    </div>
+    <section class="sec" id="oscores" hidden>
+      <h2 class="label" data-t="scores"></h2>
+      <div class="card vl" id="oscorelist"></div>
+    </section>
     <div id="opost" hidden>
       <p class="endq" data-t="removeQ"></p>
       <button class="go" id="orm" data-t="rmN"></button>
@@ -259,9 +297,12 @@ const CATS = [
   { id: "movies", en: "Movies", he: "סרטים", words: {
     en: ["Harry Potter","Star Wars","Titanic","The Lion King","Frozen","Barbie","Batman","Spider-Man","Shrek","Toy Story","The Lord of the Rings","Avatar","Jurassic Park","Inception","Interstellar","The Matrix","Fast & Furious","James Bond","Mission: Impossible","Pirates of the Caribbean","Home Alone","Back to the Future","The Godfather","Forrest Gump","Gladiator","Joker","Oppenheimer","Top Gun","Finding Nemo","Up","Minions","Kung Fu Panda","Madagascar","Ice Age","Cars","Ratatouille","Mean Girls","Rocky","Dune","Avengers","Iron Man","Superman","Hulk"],
     he: ["הארי פוטר","מלחמת הכוכבים","טיטניק","מלך האריות","לשחרר את הקסם","ברבי","באטמן","ספיידרמן","שרק","צעצוע של סיפור","שר הטבעות","אווטאר","פארק היורה","אינספשן","בין כוכבים","מטריקס","מהיר ועצבני","ג'יימס בונד","משימה בלתי אפשרית","שודדי הקאריביים","שכחתי אותך בבית","בחזרה לעתיד","הסנדק","פורסט גאמפ","גלדיאטור","ג'וקר","אופנהיימר","טופ גאן","מוצאים את נמו","למעלה","מיניונים","קונג פו פנדה","מדגסקר","עידן הקרח","מכוניות","רטטוי","בנות רעות","רוקי","חולית","הנוקמים","איירון מן","סופרמן","האלק"] } },
-  { id: "games", en: "Games", he: "משחקים", words: {
-    en: ["Minecraft","Fortnite","FIFA","Mario","Tetris","Call of Duty","GTA","Roblox","Among Us","Clash of Clans","League of Legends","Counter-Strike","Pac-Man","Candy Crush","Angry Birds","Zelda","Sonic","Monopoly","Chess","Uno","Rubik's Cube"],
-    he: ["מיינקראפט","פורטנייט","פיפא","מריו","טטריס","קול אוף דיוטי","ג'י טי איי","רובלוקס","אמונג אס","קלאש אוף קלאנס","ליג אוף לג'נדס","קאונטר סטרייק","פקמן","קנדי קראש","אנגרי בירדס","זלדה","סוניק","מונופול","שחמט","אונו","קובייה הונגרית"] } },
+  { id: "games", en: "Video games", he: "משחקי וידאו", words: {   // id kept so saved toggles survive
+    en: ["Minecraft","Fortnite","FIFA","Mario","Tetris","Call of Duty","GTA","Roblox","Among Us","Clash of Clans","League of Legends","Counter-Strike","Pac-Man","Candy Crush","Angry Birds","Zelda","Sonic"],
+    he: ["מיינקראפט","פורטנייט","פיפא","מריו","טטריס","קול אוף דיוטי","ג'י טי איי","רובלוקס","אמונג אס","קלאש אוף קלאנס","ליג אוף לג'נדס","קאונטר סטרייק","פקמן","קנדי קראש","אנגרי בירדס","זלדה","סוניק"] } },
+  { id: "board", en: "Board & party games", he: "משחקי קופסה ומסיבה", words: {
+    en: ["Monopoly","Chess","Uno","Rubik's Cube","Catan","Scrabble","Jenga","Twister","Poker","Taki","Rummikub","Backgammon","Cluedo","Battleship","Dominoes","Darts","Ping pong","Truth or dare","Hide and seek","Charades"],
+    he: ["מונופול","שחמט","אונו","קובייה הונגרית","קטאן","שבץ נא","ג'נגה","טוויסטר","פוקר","טאקי","רמיקוב","שש בש","קלואדו","צוללות","דומינו","חצים","פינג פונג","אמת או חובה","מחבואים","פנטומימה"] } },
   { id: "brands", en: "Brands & apps", he: "מותגים ואפליקציות", words: {
     en: ["McDonald's","Coca-Cola","iPhone","Instagram","TikTok","WhatsApp","Netflix","Spotify","Tesla","Google","YouTube","Amazon","Apple","Samsung","PlayStation","Xbox","Nintendo Switch","Lego","IKEA","Nike","Adidas","Starbucks","Red Bull","Nutella","Bamba","Bissli","Waze","ChatGPT","Uber","Airbnb"],
     he: ["מקדונלדס","קוקה קולה","אייפון","אינסטגרם","טיקטוק","וואטסאפ","נטפליקס","ספוטיפיי","טסלה","גוגל","יוטיוב","אמזון","אפל","סמסונג","פלייסטיישן","אקסבוקס","נינטנדו סוויץ'","לגו","איקאה","נייקי","אדידס","סטארבקס","רד בול","נוטלה","במבה","ביסלי","ווייז","צ'אט ג'יפיטי","אובר","איירבנב"] } },
@@ -297,7 +338,12 @@ const UI = {
     nf: c => `Room ${c} not found. Check the code, or clear it to create a new room.`, errName: "Enter your name", errCode: "Enter a 4-letter room code",
     noNet: "Can't reach the online service. One-phone mode still works.", seen: (a, b) => `Seen ${a}/${b}`, roundLbl: "Round",
     inProgress: "Round in progress — you'll join the next one", tapAgain: "Tap to see again", toLobby: "Back to lobby",
-    rmN: "Remove word · next round", keepN: "Keep word · next round" },
+    rmN: "Remove word · next round", keepN: "Keep word · next round",
+    startVote: "Start vote", revealNoVote: "Reveal without voting", voteQ: "Who is the imposter?", voted: (a, b) => `Voted ${a}/${b}`,
+    endVote: "End vote now", guessLbl: "Guess the word", sendGuess: "Send guess", guessing: p => `${p} is guessing the word…`,
+    guessed: (p, g) => `${p} guessed: ${g}`, correct: "Correct", wrong: "Wrong", judging: "Waiting for the host to judge…",
+    resCrew: p => `Crew wins — ${p} was the imposter`, resNot: p => `Imposter wins — ${p} was not caught`, resGuess: "Imposter wins — guessed the word",
+    votesLbl: "Votes", scores: "Scores", arrow: "→" },
   he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
     split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
     inPlay: p => `${p} במשחק`, none: "אין מילים במשחק", optCat: "המתחזה רואה את הקטגוריה", optFirst: "דובר ראשון אקראי",
@@ -315,7 +361,12 @@ const UI = {
     nf: c => `החדר ${c} לא נמצא. בדקו את הקוד, או מחקו אותו כדי לפתוח חדר חדש.`, errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
     noNet: "אין חיבור לשירות המקוון. אפשר עדיין לשחק על טלפון אחד.", seen: (a, b) => `ראו ${a}/${b}`, roundLbl: "סיבוב",
     inProgress: "יש סיבוב בעיצומו — תצטרפו לסיבוב הבא", tapAgain: "הקש כדי לראות שוב", toLobby: "חזרה ללובי",
-    rmN: "הסר מילה · סיבוב הבא", keepN: "השאר מילה · סיבוב הבא" },
+    rmN: "הסר מילה · סיבוב הבא", keepN: "השאר מילה · סיבוב הבא",
+    startVote: "התחל הצבעה", revealNoVote: "חשוף בלי הצבעה", voteQ: "מי המתחזה?", voted: (a, b) => `הצביעו ${a}/${b}`,
+    endVote: "סיים הצבעה עכשיו", guessLbl: "נחשו את המילה", sendGuess: "שלח ניחוש", guessing: p => `${p} מנחש/ת את המילה…`,
+    guessed: (p, g) => `${p} ניחש/ה: ${g}`, correct: "נכון", wrong: "לא נכון", judging: "ממתינים שהמארח ישפוט…",
+    resCrew: p => `הצוות מנצח — ${p} היה/הייתה המתחזה`, resNot: p => `המתחזים מנצחים — ${p} לא נתפס/ה`, resGuess: "המתחזים מנצחים — ניחשו את המילה",
+    votesLbl: "הצבעות", scores: "ניקוד", arrow: "←" },
 };
 const $ = id => document.getElementById(id);
 const rnd = k => crypto.getRandomValues(new Uint32Array(1))[0] % k;
@@ -354,6 +405,18 @@ function addCustom(w, c) {   // false = empty or duplicate (case-insensitive) of
 const maxImp = () => Math.min(3, Math.floor((n - 1) / 2));
 // k distinct random indexes out of n
 function pickReds(n, k) { const s = new Set(); while (s.size < k) s.add(rnd(n)); return s; }
+// majority of {from: to} votes → id with strictly the most votes; a tie or no votes → null
+function tally(votes) {
+  const c = {}; for (const to of Object.values(votes)) c[to] = (c[to] || 0) + 1;
+  const m = Math.max(0, ...Object.values(c)), top = Object.keys(c).filter(k => c[k] === m);
+  return top.length === 1 ? top[0] : null;
+}
+// imposters win if no imposter was voted out, or the caught one guessed the word. Crew +1 each, imposters +2 each.
+function outcome(reds, ids, votedOut, guessCorrect) {
+  const caught = !!votedOut && reds.includes(votedOut), imp = !caught || !!guessCorrect, deltas = {};
+  for (const id of ids) if (reds.includes(id) === imp) deltas[id] = imp ? 2 : 1;
+  return { caught, winner: imp ? "imposter" : "crew", deltas };
+}
 // --- end of pure logic ---
 
 let stage = "";
@@ -534,8 +597,10 @@ const SB_URL = "https://rmmojdxoodamrumenitm.supabase.co";
 const SB_KEY = "sb_publishable_z5t-Ln7K7GrzVK4SvMNnPg_PdVyC9g_";
 const SB_LEGACY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbW9qZHhvb2RhbXJ1bWVuaXRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNDI5NDYsImV4cCI6MjEwNzcxODk0Nn0.gbfYDuiSMld5qh9rIarlW9tOuWMb4wGpN0ehCvafMFQ";
 const KEYS = [SB_KEY, SB_LEGACY];   // publishable key first, legacy anon key if realtime rejects it
-let nfTimer = 0, inviteCode = "", qrFor = "", ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false;
-// R = current round: the "round" payload + seen:Set, revealed, endAt, done, v (0 hidden / 1 showing / 2 gray). Every client keeps it, so any can become host.
+let nfTimer = 0, inviteCode = "", qrFor = "", ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false, scores = {};
+// R = current round: the "round" payload + seen:Set, revealed, endAt, done, v (0 hidden / 1 showing / 2 gray),
+// voting, votes {from: to}, voteEnded, votedOut, guess (null = none yet), result, sent (host-only send-once keys).
+// scores = {id: {name, pts}} lives for the whole room visit. Every client keeps both, so any can become host.
 const myId = (() => {
   let v = loadJ("myId", "");
   if (typeof v !== "string" || v.length < 8) { v = Array.from({ length: 12 }, () => rnd(36).toString(36)).join(""); saveJ("myId", v); }
@@ -569,7 +634,7 @@ function enter(c, create) {
   if (!/^[A-Z]{4}$/.test(c)) { err("errCode"); return $("code").focus(); }
   saveJ("name", myName); err("");
   if (!client()) return err("noNet");
-  code = c; joining = !create; joinedAt = Date.now(); R = null; players = {};
+  code = c; joining = !create; joinedAt = Date.now(); R = null; players = {}; scores = {};
   $("cfgslot").append($("cfg")); $("optNamesRow").hidden = true;
   connect(); go();
 }
@@ -584,6 +649,7 @@ function connect() {
     go();
   });
   on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync);
+  on("vote_start", onVoteStart); on("vote", onVote); on("vote_end", onVoteEnd); on("guess", onGuess); on("result", onResult); on("scores", onScores);
   c.subscribe(async st => {
     if (c !== ch) return;
     if (st === "SUBSCRIBED") { await c.track({ name: myName, joinedAt }); send("sync", { id: myId });
@@ -607,7 +673,7 @@ function notFound() {   // back to the normal home view (also from an invite car
 }
 
 function leave() {
-  const c = ch; ch = null; R = null; players = {}; stopT();
+  const c = ch; ch = null; R = null; players = {}; scores = {}; stopT();
   try { cli?.removeChannel(c); } catch {}
   show("home");
 }
@@ -616,7 +682,8 @@ function leave() {
 function onRound(p) {
   if (R && R.roundId === p.roundId) return;   // replay from a sync answer: already have it
   stopT();
-  R = { ...p, seen: new Set(), revealed: false, endAt: 0, done: false, v: 0 };
+  R = { ...p, seen: new Set(), revealed: false, endAt: 0, done: false, v: 0, voting: false, votes: {}, voteEnded: false, votedOut: null, guess: null, result: null, sent: new Set() };
+  $("gin").value = "";
   go();
 }
 function onSeen(p) {
@@ -630,14 +697,52 @@ function onTimer(p) {
 }
 function onReveal(p) { if (R?.roundId !== p.roundId) return; R.revealed = true; go(); }
 function onLobby() { stopT(); R = null; go(); }
+function onVoteStart(p) {   // also a sync replay: merge votes, local ones win
+  if (R?.roundId !== p.roundId || R.revealed) return;
+  stopT(); R.voting = true; R.votes = { ...(p.votes || {}), ...R.votes }; go();
+}
+function onVote(p) {
+  if (R?.roundId !== p.roundId || !R.voting || R.voteEnded || R.revealed) return;
+  const ok = id => R.players.some(x => x.id === id);
+  if (!ok(p.from) || !ok(p.to) || p.from === p.to) return;
+  R.votes[p.from] = p.to; go();
+}
+function onVoteEnd(p) { if (R?.roundId !== p.roundId || !R.voting || R.voteEnded) return; R.voteEnded = true; R.votedOut = p.votedOut || null; go(); }
+function onGuess(p) {
+  if (R?.roundId !== p.roundId || !R.voteEnded || R.result || R.guess !== null || p.from !== R.votedOut) return;
+  R.guess = String(p.text || "").slice(0, 40); go();
+}
+function onResult(p) {
+  if (R?.roundId !== p.roundId || R.result) return;
+  R.result = p; R.votedOut = p.votedOut || null; R.revealed = true; scores = p.scores || {}; go();
+}
+function onScores(p) { scores = p.scores || {}; go(); }
 async function onSync(p) {   // only the current host answers, with everything a newcomer needs
-  if (p.id === myId || !R || hostOf(players) !== myId) return;
-  const { seen, revealed, endAt, done, v, ...rd } = R, roundId = R.roundId;
+  if (p.id === myId || hostOf(players) !== myId) return;
+  await send("scores", { scores });
+  if (!R) return;
+  const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, ...rd } = R, roundId = R.roundId;
   await send("round", rd);
   await send("seen", { roundId, ids: [...seen] });
   if (endAt) await send("timer", { roundId, endAt });
-  if (revealed) await send("reveal", { roundId });
+  if (revealed && !voting) await send("reveal", { roundId });
+  if (voting) await send("vote_start", { roundId, votes });
+  if (voteEnded) await send("vote_end", { roundId, votedOut });
+  if (guess !== null) await send("guess", { roundId, from: votedOut, text: guess });
+  if (result) await send("result", result);
 }
+
+// ---- host: drive the vote, compute the result once ----
+const once = k => !R.sent.has(k) && !!R.sent.add(k);
+function endVote() { if (once("end")) send("vote_end", { roundId: R.roundId, votedOut: tally(R.votes) }); }
+function sendResult(guessCorrect) {
+  const o = outcome(R.reds, R.players.map(p => p.id), R.votedOut, guessCorrect), sc = { ...scores };
+  for (const p of R.players) sc[p.id] = { name: p.name, pts: (scores[p.id]?.pts || 0) + (o.deltas[p.id] || 0) };
+  send("result", { roundId: R.roundId, votedOut: R.votedOut, caught: o.caught, guessCorrect: guessCorrect ?? null, winner: o.winner, votes: R.votes, scores: sc });
+}
+const scoreList = () => Object.values(scores).sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name, lang))
+  .map(s => `<div class="pl"><span>${esc(s.name)}</span><b class="pts">${s.pts}</b></div>`).join("");
+const hasScore = () => Object.values(scores).some(s => s.pts > 0);
 
 // ---- host: start a round from the host's own pool/options ----
 function startRound() {
@@ -678,6 +783,7 @@ function lobbyRender() {
   $("ostart").hidden = !host; $("ostart").disabled = ids.length < 3;
   $("need").hidden = !host || ids.length >= 3;
   if (host) { n = ids.length; syncImp(); }
+  $("lscores").hidden = !hasScore(); $("lscorelist").innerHTML = scoreList();
 }
 
 function cardRender() {
@@ -705,23 +811,57 @@ function gameRender() {
   const host = hostOf(players) === myId, me = R.players.some(p => p.id === myId);
   const nameOf = id => R.players.find(p => p.id === id)?.name ?? "";
   const act = R.players.filter(p => players[p.id]), seenN = act.filter(p => R.seen.has(p.id)).length;   // absent players don't block "all seen"
-  $("seen").textContent = t("seen", seenN, act.length);
+  const vp = R.voting, ve = R.voteEnded, late = R.revealed || vp;
+  const votedN = act.filter(p => R.votes[p.id]).length, gNeed = ve && !!R.votedOut && R.reds.includes(R.votedOut);
+  if (host && vp && !R.revealed) {   // host moves the vote along (also right after a host handover)
+    if (!ve) { if (act.length && votedN >= act.length) endVote(); }
+    else if (!gNeed) { if (once("res")) sendResult(null); }
+    else if (R.guess === null && !players[R.votedOut] && once("res")) sendResult(false);   // guesser left
+  }
+  $("seen").textContent = vp ? t("voted", votedN, act.length) : t("seen", seenN, act.length);
   $("ogame").classList.toggle("rev", R.revealed);
-  $("ocard").hidden = R.revealed || !me;
-  $("onot").hidden = R.revealed || me;
-  if (me && !R.revealed) cardRender();
-  const showFirst = !R.revealed && R.opts.first && R.firstId && act.length > 0 && seenN >= act.length;
+  $("ocard").hidden = late || !me;
+  $("onot").hidden = late || me;
+  if (me && !late) cardRender();
+  const showFirst = !late && R.opts.first && R.firstId && act.length > 0 && seenN >= act.length;
   $("ofirst").hidden = !showFirst;
   if (showFirst) $("ofirst").textContent = t("starts", nameOf(R.firstId));
   const clk = $("oclock");
-  clk.hidden = R.revealed || !R.opts.timer;
-  if (R.revealed) stopT();
+  clk.hidden = late || !R.opts.timer;
+  if (late) stopT();
   else if (!R.endAt) { clk.textContent = mmss(R.opts.timer * 60); clk.className = ""; }
   else if (R.done) { clk.textContent = t("timesUp"); clk.className = "up"; }
   else if (!timerId) { timerId = setInterval(otick, 250); otick(); }
-  $("otstart").hidden = !(host && R.opts.timer && !R.endAt && !R.revealed);
-  $("oreveal").hidden = !host || R.revealed;
+  $("otstart").hidden = !(host && R.opts.timer && !R.endAt && !late);
+  $("ovstart").hidden = $("oreveal").hidden = !host || late;
   $("opost").hidden = !(host && R.revealed);
+  $("ovote").hidden = !(vp && !ve && !R.revealed);
+  if (!$("ovote").hidden) {
+    $("vlist").innerHTML = !me ? "" : R.players.filter(p => p.id !== myId && players[p.id]).map(p =>
+      `<button class="vrow" data-id="${esc(p.id)}" aria-pressed="${R.votes[myId] === p.id}"><i></i><span>${esc(p.name)}</span></button>`).join("");
+    $("oendvote").hidden = !host;
+  }
+  const gs = gNeed && !R.result, mine = R.votedOut === myId, gIn = R.guess !== null;
+  $("oguess").hidden = !gs;
+  if (gs) {
+    $("gwho").textContent = t("guessing", nameOf(R.votedOut));
+    $("gwho").hidden = mine || gIn;
+    $("gform").hidden = !mine || gIn;
+    $("ojudge").hidden = !host || !gIn;
+    $("gwait").hidden = host || !gIn;
+  }
+  $("gtext").hidden = !gIn;
+  if (gIn) $("gtext").textContent = t("guessed", nameOf(R.votedOut), R.guess);
+  const res = R.result;
+  $("ores").hidden = !res;
+  if (res) {
+    $("resline").textContent = res.winner === "crew" ? t("resCrew", nameOf(res.votedOut)) : res.guessCorrect ? t("resGuess") : t("resNot", R.reds.map(nameOf).join(", "));
+    $("vlog").innerHTML = Object.entries(res.votes).map(([f, to]) =>
+      `<div class="pl"><span><bdi>${esc(nameOf(f))}</bdi> ${esc(t("arrow"))} <bdi>${esc(nameOf(to))}</bdi></span></div>`).join("");
+    $("vsec").hidden = !$("vlog").firstChild;
+  }
+  $("oscores").hidden = !(R.revealed && hasScore());
+  $("oscorelist").innerHTML = scoreList();
   $("owaitp").hidden = host || !R.revealed;
   $("owordline").hidden = $("oimpline").hidden = !R.revealed;
   if (R.revealed) {
@@ -762,6 +902,13 @@ $("ocard").onclick = () => {
 };
 $("otstart").onclick = () => send("timer", { roundId: R.roundId, endAt: Date.now() + R.opts.timer * 60000 });
 $("oreveal").onclick = () => send("reveal", { roundId: R.roundId });
+$("ovstart").onclick = () => send("vote_start", { roundId: R.roundId });
+$("vlist").onclick = e => { const b = e.target.closest("[data-id]"); if (b && R) send("vote", { roundId: R.roundId, from: myId, to: b.dataset.id }); };
+$("oendvote").onclick = () => R && endVote();
+$("gsend").onclick = () => { const text = $("gin").value.trim(); if (text && R) send("guess", { roundId: R.roundId, from: myId, text }); };
+$("gin").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) $("gsend").click(); };
+$("ocorrect").onclick = () => R && once("res") && sendResult(true);
+$("owrong").onclick = () => R && once("res") && sendResult(false);
 $("oback").onclick = () => send("lobby", {});
 $("okeep").onclick = startRound;
 $("orm").onclick = () => {
