@@ -107,6 +107,8 @@
   .vrow i { flex: none; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--muted); }
   .vrow[aria-pressed="true"] { border-color: var(--accent); background: var(--surface); }
   .vrow[aria-pressed="true"] i { background: var(--accent); border-color: var(--accent); }
+  #net { position: fixed; top: 0; inset-inline: 0; z-index: 9; text-align: center; padding: 6px 12px; background: var(--surface); color: var(--muted); font-size: .9rem; pointer-events: none; }
+  .vrow small { margin-inline-start: auto; color: var(--muted); font-size: .85rem; }
   .pts { font-variant-numeric: tabular-nums; font-weight: 800; }
   .vl { padding: 4px 16px; gap: 0; }
   #gtext, #resline { overflow-wrap: anywhere; }
@@ -114,6 +116,7 @@
 </style>
 </head>
 <body>
+<div id="net" role="status" hidden data-t="reconnecting"></div>
 
 <main id="home">
   <h1>Imp<span>o</span>ster</h1>
@@ -223,6 +226,7 @@
   <button id="ocard"></button>
   <p class="endq" id="onot" hidden data-t="inProgress"></p>
   <div id="obelow">
+    <p class="hint" id="oaway" hidden></p>
     <div id="ofirst" hidden></div>
     <div id="oclock" hidden></div>
     <div id="owordline" hidden></div>
@@ -246,6 +250,7 @@
         <button class="go" id="ocorrect" data-t="correct"></button>
         <button class="tonal" id="owrong" data-t="wrong"></button>
       </div>
+      <button class="tonal" id="oskip" data-t="skipGuess" hidden></button>
       <p class="hint" id="gwait" data-t="judging"></p>
     </section>
     <p class="endq" id="gtext" hidden></p>
@@ -343,7 +348,8 @@ const UI = {
     endVote: "End vote now", guessLbl: "Guess the word", sendGuess: "Send guess", guessing: p => `${p} is guessing the word…`,
     guessed: (p, g) => `${p} guessed: ${g}`, correct: "Correct", wrong: "Wrong", judging: "Waiting for the host to judge…",
     resCrew: p => `Crew wins — ${p} was the imposter`, resNot: p => `Imposter wins — ${p} was not caught`, resGuess: "Imposter wins — guessed the word",
-    votesLbl: "Votes", scores: "Scores", arrow: "→" },
+    votesLbl: "Votes", scores: "Scores", arrow: "→",
+    reconnecting: "Reconnecting…", away: "away", skipGuess: "Skip guess" },
   he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
     split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
     inPlay: p => `${p} במשחק`, none: "אין מילים במשחק", optCat: "המתחזה רואה את הקטגוריה", optFirst: "דובר ראשון אקראי",
@@ -366,7 +372,8 @@ const UI = {
     endVote: "סיים הצבעה עכשיו", guessLbl: "נחשו את המילה", sendGuess: "שלח ניחוש", guessing: p => `${p} מנחש/ת את המילה…`,
     guessed: (p, g) => `${p} ניחש/ה: ${g}`, correct: "נכון", wrong: "לא נכון", judging: "ממתינים שהמארח ישפוט…",
     resCrew: p => `הצוות מנצח — ${p} היה/הייתה המתחזה`, resNot: p => `המתחזים מנצחים — ${p} לא נתפס/ה`, resGuess: "המתחזים מנצחים — ניחשו את המילה",
-    votesLbl: "הצבעות", scores: "ניקוד", arrow: "←" },
+    votesLbl: "הצבעות", scores: "ניקוד", arrow: "←",
+    reconnecting: "מתחבר מחדש…", away: "לא מחובר", skipGuess: "דלג על הניחוש" },
 };
 const $ = id => document.getElementById(id);
 const rnd = k => crypto.getRandomValues(new Uint32Array(1))[0] % k;
@@ -598,6 +605,8 @@ const SB_KEY = "sb_publishable_z5t-Ln7K7GrzVK4SvMNnPg_PdVyC9g_";
 const SB_LEGACY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbW9qZHhvb2RhbXJ1bWVuaXRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNDI5NDYsImV4cCI6MjEwNzcxODk0Nn0.gbfYDuiSMld5qh9rIarlW9tOuWMb4wGpN0ehCvafMFQ";
 const KEYS = [SB_KEY, SB_LEGACY];   // publishable key first, legacy anon key if realtime rejects it
 let nfTimer = 0, inviteCode = "", qrFor = "", ki = 0, cli = null, ch = null, code = "", myName = "", joinedAt = 0, joining = false, players = {}, R = null, obusy = false, scores = {};
+let epoch = 0, up = false, joined = false, manual = false, retry = 0, rcT = 0;   // epoch: Date.now() of the last round/lobby change, newest wins
+const SESS = 6 * 36e5;   // a saved session is good for 6 h
 // R = current round: the "round" payload + seen:Set, revealed, endAt, done, v (0 hidden / 1 showing / 2 gray),
 // voting, votes {from: to}, voteEnded, votedOut, guess (null = none yet), result, sent (host-only send-once keys).
 // scores = {id: {name, pts}} lives for the whole room visit. Every client keeps both, so any can become host.
@@ -628,13 +637,21 @@ function client() {
   return cli;
 }
 
-function enter(c, create) {
-  myName = $("name").value.trim().slice(0, 16);
+const saveSession = () => { if (code) saveJ("session", { code, name: myName, joinedAt, at: Date.now() }); };
+const forget = () => { try { localStorage.removeItem("session"); } catch {} };
+setInterval(saveSession, 60000);
+
+function enter(c, create, s) {   // s = saved session: auto-rejoin with the same name and joinedAt
+  myName = (s ? s.name : $("name").value).trim().slice(0, 16);
   if (!myName) { err("errName"); return $("name").focus(); }
   if (!/^[A-Z]{4}$/.test(c)) { err("errCode"); return $("code").focus(); }
-  saveJ("name", myName); err("");
+  if (!s) saveJ("name", myName);
+  err("");
   if (!client()) return err("noNet");
-  code = c; joining = !create; joinedAt = Date.now(); R = null; players = {}; scores = {};
+  clearTimeout(rcT);
+  code = c; manual = !s; joining = !create && !s; joined = up = false; retry = 0; epoch = 0;
+  joinedAt = s ? s.joinedAt : Date.now(); R = null; players = {}; scores = {};
+  saveSession();
   $("cfgslot").append($("cfg")); $("optNamesRow").hidden = true;
   connect(); go();
 }
@@ -648,22 +665,40 @@ function connect() {
     for (const k in st) players[k] = st[k][0];
     go();
   });
-  on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync);
-  on("vote_start", onVoteStart); on("vote", onVote); on("vote_end", onVoteEnd); on("guess", onGuess); on("result", onResult); on("scores", onScores);
+  on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync); on("state", onState);
+  on("vote_start", onVoteStart); on("vote", onVote); on("vote_end", onVoteEnd); on("guess", onGuess); on("result", onResult);
   c.subscribe(async st => {
     if (c !== ch) return;
-    if (st === "SUBSCRIBED") { await c.track({ name: myName, joinedAt }); send("sync", { id: myId });
-      clearTimeout(nfTimer);
-      if (joining) nfTimer = setTimeout(() => { if (c === ch && !Object.keys(players).some(k => k !== myId)) notFound(); }, 4000);   // joined, still alone: wrong code
+    if (st === "SUBSCRIBED") {
+      joined = up = true; retry = 0; $("net").hidden = true; clearTimeout(nfTimer); saveSession();
+      await c.track({ name: myName, joinedAt }); send("sync", { id: myId });
+      if (joining) { joining = false; nfTimer = setTimeout(() => { if (c === ch && !Object.keys(players).some(k => k !== myId)) notFound(); }, 4000); }   // manual join only: still alone = wrong code
     }
-    else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT") {
-      if (ki < KEYS.length - 1) {   // retry once with the legacy key
+    else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT" || st === "CLOSED") {
+      if (!joined && ki < KEYS.length - 1) {   // first attempt only: retry once with the legacy key
         ki++; ch = null; try { cli.removeAllChannels(); } catch {} cli = null;
-        if (client()) connect(); else { leave(); err("noNet"); }
-      } else { leave(); err("noNet"); }
+        if (client()) connect(); else if (manual) { leave(); err("noNet"); } else redo(1000);
+      } else if (!joined && manual) { leave(); err("noNet"); }
+      else redo(Math.min(1000 * 2 ** retry++, 10000));   // never kick: banner + resubscribe with backoff until it works or the player leaves
     }
   });
 }
+
+// the channel is dead or suspect: drop it and resubscribe after `ms`; R, scores and epoch stay in memory
+function redo(ms) {
+  if (!code) return;
+  up = false; $("net").hidden = false;
+  const c = ch; ch = null; try { cli?.removeChannel(c); } catch {}
+  clearTimeout(rcT); rcT = setTimeout(() => { if (code && !ch) connect(); }, ms);
+}
+function wake() {   // page came back (tab visible, bfcache, network): reconnect now unless the channel is healthy
+  if (!code) return;
+  saveSession();
+  if (!up || (ch?.state && ch.state !== "joined")) { retry = 0; redo(0); }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
+addEventListener("pageshow", e => { if (e.persisted) wake(); });
+addEventListener("online", wake);
 
 function notFound() {   // back to the normal home view (also from an invite card) with the code kept and an error under it
   const c = code; leave();
@@ -672,16 +707,18 @@ function notFound() {   // back to the normal home view (also from an invite car
   $("errCode").textContent = t("nf", c); $("errCode").hidden = false;
 }
 
-function leave() {
-  const c = ch; ch = null; R = null; players = {}; scores = {}; stopT();
+function leave() {   // explicit leave, room not found, or first connect failed: the only places the saved session is dropped
+  const c = ch; ch = null; code = ""; R = null; epoch = 0; up = false; players = {}; scores = {}; stopT(); clearTimeout(rcT);
+  $("net").hidden = true; forget();
   try { cli?.removeChannel(c); } catch {}
   show("home");
 }
 
 // ---- incoming events ----
 function onRound(p) {
-  if (R && R.roundId === p.roundId) return;   // replay from a sync answer: already have it
-  stopT();
+  const e = p.epoch || 0;
+  if (e < epoch || (R && R.roundId === p.roundId)) return;   // older than what we have, or already have it
+  epoch = e; stopT();
   R = { ...p, seen: new Set(), revealed: false, endAt: 0, done: false, v: 0, voting: false, votes: {}, voteEnded: false, votedOut: null, guess: null, result: null, sent: new Set() };
   $("gin").value = "";
   go();
@@ -696,7 +733,7 @@ function onTimer(p) {
   R.endAt = p.endAt; R.done = false; go();
 }
 function onReveal(p) { if (R?.roundId !== p.roundId) return; R.revealed = true; go(); }
-function onLobby() { stopT(); R = null; go(); }
+function onLobby(p) { const e = p.epoch || 0; if (e < epoch) return; epoch = e; stopT(); R = null; go(); }
 function onVoteStart(p) {   // also a sync replay: merge votes, local ones win
   if (R?.roundId !== p.roundId || R.revealed) return;
   stopT(); R.voting = true; R.votes = { ...(p.votes || {}), ...R.votes }; go();
@@ -716,20 +753,33 @@ function onResult(p) {
   if (R?.roundId !== p.roundId || R.result) return;
   R.result = p; R.votedOut = p.votedOut || null; R.revealed = true; scores = p.scores || {}; go();
 }
-function onScores(p) { scores = p.scores || {}; go(); }
-async function onSync(p) {   // only the current host answers, with everything a newcomer needs
-  if (p.id === myId || hostOf(players) !== myId) return;
-  await send("scores", { scores });
-  if (!R) return;
-  const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, ...rd } = R, roundId = R.roundId;
-  await send("round", rd);
-  await send("seen", { roundId, ids: [...seen] });
-  if (endAt) await send("timer", { roundId, endAt });
-  if (revealed && !voting) await send("reveal", { roundId });
-  if (voting) await send("vote_start", { roundId, votes });
-  if (voteEnded) await send("vote_end", { roundId, votedOut });
-  if (guess !== null) await send("guess", { roundId, from: votedOut, text: guess });
-  if (result) await send("result", result);
+const tot = sc => Object.values(sc).reduce((a, x) => a + x.pts, 0);
+function snap() {
+  const o = { epoch, scores, round: null };
+  if (R) {
+    const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, ...rd } = R;
+    Object.assign(o, { round: rd, seen: [...seen], endAt, revealed, voting, votes, voteEnded, votedOut, guess, result });
+  }
+  return o;
+}
+function onSync(p) {   // every client with state answers, spread out so a newcomer isn't flooded
+  if (p.id === myId || (!R && !epoch && !Object.keys(scores).length)) return;
+  setTimeout(() => send("state", snap()), rnd(600));
+}
+function onState(s) {   // newer epoch wins; same round: replay the progress through the idempotent handlers
+  const e = s.epoch || 0, rd = s.round, sc = s.scores || {};
+  if (e > epoch || (e === epoch && tot(sc) > tot(scores))) scores = sc;
+  if (rd) onRound({ ...rd, epoch: rd.epoch ?? e }); else if (e > epoch) onLobby({ epoch: e });
+  if (!R || !rd || R.roundId !== rd.roundId) return go();
+  const roundId = R.roundId;
+  onSeen({ roundId, ids: s.seen || [] });
+  if (s.endAt) onTimer({ roundId, endAt: s.endAt });
+  if (s.revealed && !s.voting) onReveal({ roundId });
+  if (s.voting) onVoteStart({ roundId, votes: s.votes });
+  if (s.voteEnded) onVoteEnd({ roundId, votedOut: s.votedOut });
+  if (s.guess != null) onGuess({ roundId, from: s.votedOut, text: s.guess });
+  if (s.result) onResult(s.result);
+  go();
 }
 
 // ---- host: drive the vote, compute the result once ----
@@ -744,18 +794,19 @@ const scoreList = () => Object.values(scores).sort((a, b) => b.pts - a.pts || a.
   .map(s => `<div class="pl"><span>${esc(s.name)}</span><b class="pts">${s.pts}</b></div>`).join("");
 const hasScore = () => Object.values(scores).some(s => s.pts > 0);
 
+const bump = () => Math.max(Date.now(), epoch + 1);   // strictly newer than anything seen, even with clock skew
 // ---- host: start a round from the host's own pool/options ----
 function startRound() {
   const ids = order(players);
   const p = pool();
-  if (ids.length < 3 || !p.length) return send("lobby", {});
+  if (ids.length < 3 || !p.length) return send("lobby", { epoch: bump() });
   n = ids.length; syncImp();
   let pick;
   do pick = p[rnd(p.length)]; while (pick.w === lastWord && p.length > 1);
   lastWord = pick.w;
   const reds = [...pickReds(n, nImp)].map(k => ids[k]);
   send("round", {
-    roundId: Date.now().toString(36) + rnd(1e6).toString(36), lang,
+    epoch: bump(), roundId: Date.now().toString(36) + rnd(1e6).toString(36), lang,
     players: ids.map(id => ({ id, name: players[id].name })), reds, word: pick.w,
     cat: CATS.find(c => c.id === pick.c)[lang],
     opts: { cat: !!opts.cat, first: !!opts.first, timer: opts.timer },
@@ -765,7 +816,7 @@ function startRound() {
 
 // ---- rendering ----
 function go() {
-  if (!ch) return;
+  if (!code) return;
   if (R) { show("ogame"); gameRender(); } else { show("room"); lobbyRender(); }
 }
 
@@ -810,15 +861,15 @@ function otick() {
 function gameRender() {
   const host = hostOf(players) === myId, me = R.players.some(p => p.id === myId);
   const nameOf = id => R.players.find(p => p.id === id)?.name ?? "";
-  const act = R.players.filter(p => players[p.id]), seenN = act.filter(p => R.seen.has(p.id)).length;   // absent players don't block "all seen"
+  const act = R.players.filter(p => players[p.id]), away = R.players.filter(p => !players[p.id]), seenN = act.filter(p => R.seen.has(p.id)).length;   // absent players don't block "all seen"
   const vp = R.voting, ve = R.voteEnded, late = R.revealed || vp;
-  const votedN = act.filter(p => R.votes[p.id]).length, gNeed = ve && !!R.votedOut && R.reds.includes(R.votedOut);
+  const votedN = R.players.filter(p => R.votes[p.id]).length, gNeed = ve && !!R.votedOut && R.reds.includes(R.votedOut);
   if (host && vp && !R.revealed) {   // host moves the vote along (also right after a host handover)
-    if (!ve) { if (act.length && votedN >= act.length) endVote(); }
+    if (!ve) { if (votedN >= R.players.length) endVote(); }   // all round players, present or not; host's End vote covers the gone
     else if (!gNeed) { if (once("res")) sendResult(null); }
-    else if (R.guess === null && !players[R.votedOut] && once("res")) sendResult(false);   // guesser left
   }
-  $("seen").textContent = vp ? t("voted", votedN, act.length) : t("seen", seenN, act.length);
+  $("seen").textContent = vp ? t("voted", votedN, R.players.length) : t("seen", seenN, act.length);
+  $("oaway").hidden = !away.length; $("oaway").textContent = away.map(p => p.name).join(", ") + " · " + t("away");
   $("ogame").classList.toggle("rev", R.revealed);
   $("ocard").hidden = late || !me;
   $("onot").hidden = late || me;
@@ -837,8 +888,8 @@ function gameRender() {
   $("opost").hidden = !(host && R.revealed);
   $("ovote").hidden = !(vp && !ve && !R.revealed);
   if (!$("ovote").hidden) {
-    $("vlist").innerHTML = !me ? "" : R.players.filter(p => p.id !== myId && players[p.id]).map(p =>
-      `<button class="vrow" data-id="${esc(p.id)}" aria-pressed="${R.votes[myId] === p.id}"><i></i><span>${esc(p.name)}</span></button>`).join("");
+    $("vlist").innerHTML = !me ? "" : R.players.filter(p => p.id !== myId).map(p =>
+      `<button class="vrow" data-id="${esc(p.id)}" aria-pressed="${R.votes[myId] === p.id}"><i></i><span>${esc(p.name)}</span>${players[p.id] ? "" : `<small>${esc(t("away"))}</small>`}</button>`).join("");
     $("oendvote").hidden = !host;
   }
   const gs = gNeed && !R.result, mine = R.votedOut === myId, gIn = R.guess !== null;
@@ -849,6 +900,7 @@ function gameRender() {
     $("gform").hidden = !mine || gIn;
     $("ojudge").hidden = !host || !gIn;
     $("gwait").hidden = host || !gIn;
+    $("oskip").hidden = !host || gIn || !!players[R.votedOut];   // imposter is away: host may count it as a wrong guess
   }
   $("gtext").hidden = !gIn;
   if (gIn) $("gtext").textContent = t("guessed", nameOf(R.votedOut), R.guess);
@@ -908,8 +960,8 @@ $("oendvote").onclick = () => R && endVote();
 $("gsend").onclick = () => { const text = $("gin").value.trim(); if (text && R) send("guess", { roundId: R.roundId, from: myId, text }); };
 $("gin").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) $("gsend").click(); };
 $("ocorrect").onclick = () => R && once("res") && sendResult(true);
-$("owrong").onclick = () => R && once("res") && sendResult(false);
-$("oback").onclick = () => send("lobby", {});
+$("owrong").onclick = $("oskip").onclick = () => R && once("res") && sendResult(false);
+$("oback").onclick = () => send("lobby", { epoch: bump() });
 $("okeep").onclick = startRound;
 $("orm").onclick = () => {
   const ex = R.lang === lang ? excluded : load("excluded_" + R.lang);
@@ -922,6 +974,8 @@ function initHome() {
   const r = (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
   if (r) { inviteCode = r; $("code").value = r; $("invcode").textContent = r; $("inv").hidden = false; $("normal").hidden = true; $("invT").textContent = t("joinRoomN", r); $("name").focus(); }
   show("home");
+  const s = loadJ("session", null);   // saved session: rejoin directly, unless the invite is for another room
+  if (s && /^[A-Z]{4}$/.test(s.code) && typeof s.name === "string" && s.joinedAt > 0 && Date.now() - s.at < SESS && (!r || r === s.code)) enter(s.code, false, s);
 }
 
 setLang(lang);
