@@ -262,9 +262,9 @@
       <h2 class="label" data-t="scores"></h2>
       <div class="card vl" id="oscorelist"></div>
     </section>
+    <p class="hint" id="orml" hidden></p>
     <div id="opost" hidden>
-      <p class="endq" data-t="removeQ"></p>
-      <button class="go" id="orm" data-t="rmN"></button>
+      <button class="go" id="onext" data-t="nextN"></button>
       <button class="tonal" id="okeep" data-t="keepN"></button>
       <button class="txt" id="oback" data-t="toLobby"></button>
     </div>
@@ -286,9 +286,9 @@
     <div id="post" hidden>
       <div id="wordline"></div>
       <div id="impline"></div>
-      <p class="endq" data-t="removeQ"></p>
-      <button class="go" id="rm" data-t="rm"></button>
-      <button class="tonal" id="keep" data-t="keep"></button>
+      <p class="hint" data-t="rmNote1"></p>
+      <button class="go" id="next" data-t="nextN"></button>
+      <button class="tonal" id="keep" data-t="keepN"></button>
     </div>
   </div>
 </main>
@@ -333,8 +333,7 @@ const UI = {
     left: k => `${k} left`, playerN: k => `Player ${k}`, passPhone: "Pass the phone · ", tapSee: "Tap to see your color",
     imposter: "IMPOSTER", blend: "Blend in · tap to hide", wordIs: "The word is", tapHide: "Tap to hide", category: c => `Category: ${c}`,
     starts: p => `${p} starts`, startTimer: "Start timer", timesUp: "Time's up — vote!", reveal: "Reveal", wasWord: "The word was",
-    impLabel: k => k > 1 ? "Imposters" : "Imposter", removeQ: "Remove this round's word from the list?",
-    rm: "Remove word · play again", keep: "Keep word · play again", quit: "‹ Back to setup", namePh: "e.g. Dana", codePh: "ABCD", hostGame: "Host a game", joinGame: "Join a game",
+    impLabel: k => k > 1 ? "Imposters" : "Imposter", quit: "‹ Back to setup", namePh: "e.g. Dana", codePh: "ABCD", hostGame: "Host a game", joinGame: "Join a game",
     joinRoomN: c => `Join room ${c}`, hostInstead: "Host a new room instead", scan: "Scan to join", backLbl: "Back",
     codeHint: "Room code · leave empty to host", yourName: "Your name", create: "Create room", orJoin: "or join a room", roomCode: "Room code", join: "Join room",
     onePhone: "Play on one phone", back: "‹", leave: "‹ Leave room", copyLink: "Copy invite link", copied: "Copied",
@@ -343,7 +342,8 @@ const UI = {
     nf: c => `Room ${c} not found. Check the code, or clear it to create a new room.`, errName: "Enter your name", errCode: "Enter a 4-letter room code",
     noNet: "Can't reach the online service. One-phone mode still works.", seen: (a, b) => `Seen ${a}/${b}`, roundLbl: "Round",
     inProgress: "Round in progress — you'll join the next one", tapAgain: "Tap to see again", toLobby: "Back to lobby",
-    rmN: "Remove word · next round", keepN: "Keep word · next round",
+    nextN: "Next round", keepN: "Keep word · next round",
+    rmNote: "This word was removed from everyone's list. The host can keep it.", keptNote: "The host kept this word.", rmNote1: "This word was removed from the list.",
     startVote: "Start vote", revealNoVote: "Reveal without voting", voteQ: "Who is the imposter?", voted: (a, b) => `Voted ${a}/${b}`,
     endVote: "End vote now", guessLbl: "Guess the word", sendGuess: "Send guess", guessing: p => `${p} is guessing the word…`,
     guessed: (p, g) => `${p} guessed: ${g}`, correct: "Correct", wrong: "Wrong", judging: "Waiting for the host to judge…",
@@ -357,8 +357,7 @@ const UI = {
     left: k => `נשארו ${k}`, playerN: k => `שחקן ${k}`, passPhone: "העבר את הטלפון · ", tapSee: "הקש כדי לראות את הצבע",
     imposter: "מתחזה", blend: "תשתלב · הקש להסתרה", wordIs: "המילה היא", tapHide: "הקש להסתרה", category: c => `קטגוריה: ${c}`,
     starts: p => `${p} מתחיל/ה`, startTimer: "התחל טיימר", timesUp: "נגמר הזמן — מצביעים!", reveal: "חשוף", wasWord: "המילה הייתה",
-    impLabel: k => k > 1 ? "המתחזים" : "המתחזה", removeQ: "להסיר את המילה של הסיבוב מהרשימה?",
-    rm: "הסר מילה · משחק חדש", keep: "השאר מילה · משחק חדש", quit: "› חזרה להגדרות", namePh: "למשל דנה", codePh: "ABCD", hostGame: "אירוח משחק", joinGame: "הצטרפות למשחק",
+    impLabel: k => k > 1 ? "המתחזים" : "המתחזה", quit: "› חזרה להגדרות", namePh: "למשל דנה", codePh: "ABCD", hostGame: "אירוח משחק", joinGame: "הצטרפות למשחק",
     joinRoomN: c => `הצטרפות לחדר ${c}`, hostInstead: "לפתוח חדר חדש במקום", scan: "סרקו כדי להצטרף", backLbl: "חזרה",
     codeHint: "קוד חדר · השאירו ריק כדי לפתוח חדר", yourName: "השם שלך", create: "פתח חדר", orJoin: "או הצטרף לחדר", roomCode: "קוד חדר", join: "הצטרף לחדר",
     onePhone: "משחקים על טלפון אחד", back: "›", leave: "› יציאה מהחדר", copyLink: "העתק קישור הזמנה", copied: "הועתק",
@@ -367,7 +366,8 @@ const UI = {
     nf: c => `החדר ${c} לא נמצא. בדקו את הקוד, או מחקו אותו כדי לפתוח חדר חדש.`, errName: "הכניסו שם", errCode: "הכניסו קוד חדר בן 4 אותיות",
     noNet: "אין חיבור לשירות המקוון. אפשר עדיין לשחק על טלפון אחד.", seen: (a, b) => `ראו ${a}/${b}`, roundLbl: "סיבוב",
     inProgress: "יש סיבוב בעיצומו — תצטרפו לסיבוב הבא", tapAgain: "הקש כדי לראות שוב", toLobby: "חזרה ללובי",
-    rmN: "הסר מילה · סיבוב הבא", keepN: "השאר מילה · סיבוב הבא",
+    nextN: "סיבוב הבא", keepN: "השאר מילה · סיבוב הבא",
+    rmNote: "המילה הוסרה מהרשימה של כולם. המארח יכול להשאיר אותה.", keptNote: "המארח השאיר את המילה.", rmNote1: "המילה הוסרה מהרשימה.",
     startVote: "התחל הצבעה", revealNoVote: "חשוף בלי הצבעה", voteQ: "מי המתחזה?", voted: (a, b) => `הצביעו ${a}/${b}`,
     endVote: "סיים הצבעה עכשיו", guessLbl: "נחשו את המילה", sendGuess: "שלח ניחוש", guessing: p => `${p} מנחש/ת את המילה…`,
     guessed: (p, g) => `${p} ניחש/ה: ${g}`, correct: "נכון", wrong: "לא נכון", judging: "ממתינים שהמארח ישפוט…",
@@ -388,7 +388,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 try { if (localStorage.getItem("excluded_en") == null && localStorage.getItem("excluded") != null) localStorage.setItem("excluded_en", localStorage.getItem("excluded")); } catch {}
 
 let lang = loadJ("lang", "en") === "he" ? "he" : "en";
-let n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
+let lAuto = false, n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
 const opts = { cat: false, first: false, names: false, timer: 0, ...loadJ("opts", {}) };
 let names = loadJ("names", []); if (!Array.isArray(names)) names = [];
 let excluded = load("excluded_" + lang), custom = loadCustom(lang);   // custom: [{w, c}]
@@ -577,6 +577,7 @@ $("reveal").onclick = () => {
   $("wordline").innerHTML = `${t("wasWord")}<b>${esc(word)}</b>`;
   $("impline").innerHTML = `${t("impLabel", imps.length)}: <b>${esc(imps.join(", "))}</b>`;
   $("reveal").hidden = true; $("post").hidden = false;
+  lAuto = !excluded.has(word); excluded.add(word); save("excluded_" + lang, excluded); render();   // removed by default
 };
 
 $("card").onclick = () => {
@@ -597,8 +598,8 @@ $("iminus").onclick = () => { nImp--; syncImp(); };
 $("iplus").onclick = () => { nImp++; syncImp(); };
 $("start").onclick = newRound;
 $("quit").onclick = () => { stopT(); render(); show("setup"); };
-$("rm").onclick = () => { excluded.add(word); save("excluded_" + lang, excluded); render(); newRound(); };
-$("keep").onclick = newRound;
+$("next").onclick = newRound;
+$("keep").onclick = () => { if (lAuto) { excluded.delete(word); save("excluded_" + lang, excluded); render(); } newRound(); };
 // ===== Online rooms: Supabase Realtime broadcast + presence only (no tables) =====
 const SB_URL = "https://rmmojdxoodamrumenitm.supabase.co";
 const SB_KEY = "sb_publishable_z5t-Ln7K7GrzVK4SvMNnPg_PdVyC9g_";
@@ -666,7 +667,7 @@ function connect() {
     go();
   });
   on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync); on("state", onState);
-  on("vote_start", onVoteStart); on("vote", onVote); on("vote_end", onVoteEnd); on("guess", onGuess); on("result", onResult);
+  on("vote_start", onVoteStart); on("vote", onVote); on("vote_end", onVoteEnd); on("guess", onGuess); on("result", onResult); on("keep", onKeep);
   c.subscribe(async st => {
     if (c !== ch) return;
     if (st === "SUBSCRIBED") {
@@ -733,6 +734,18 @@ function onTimer(p) {
   R.endAt = p.endAt; R.done = false; go();
 }
 function onReveal(p) { if (R?.roundId !== p.roundId) return; R.revealed = true; go(); }
+const exSet = l => l === lang ? excluded : load("excluded_" + l);
+function autoRm() {   // once per round: a revealed word leaves this player's list; R.autoRm = we added it (so keep may undo it)
+  if (R.rmDone || R.kept) return;
+  R.rmDone = true;
+  const ex = exSet(R.lang);
+  if (!ex.has(R.word)) { ex.add(R.word); R.autoRm = true; save("excluded_" + R.lang, ex); render(); }
+}
+function onKeep(p) {
+  if (R?.roundId !== p.roundId) return;
+  R.kept = true;
+  if (R.autoRm) { R.autoRm = false; const ex = exSet(R.lang); ex.delete(R.word); save("excluded_" + R.lang, ex); render(); }
+}
 function onLobby(p) { const e = p.epoch || 0; if (e < epoch) return; epoch = e; stopT(); R = null; go(); }
 function onVoteStart(p) {   // also a sync replay: merge votes, local ones win
   if (R?.roundId !== p.roundId || R.revealed) return;
@@ -757,8 +770,8 @@ const tot = sc => Object.values(sc).reduce((a, x) => a + x.pts, 0);
 function snap() {
   const o = { epoch, scores, round: null };
   if (R) {
-    const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, ...rd } = R;
-    Object.assign(o, { round: rd, seen: [...seen], endAt, revealed, voting, votes, voteEnded, votedOut, guess, result });
+    const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, autoRm, kept, rmDone, ...rd } = R;
+    Object.assign(o, { kept: !!kept, round: rd, seen: [...seen], endAt, revealed, voting, votes, voteEnded, votedOut, guess, result });
   }
   return o;
 }
@@ -779,6 +792,7 @@ function onState(s) {   // newer epoch wins; same round: replay the progress thr
   if (s.voteEnded) onVoteEnd({ roundId, votedOut: s.votedOut });
   if (s.guess != null) onGuess({ roundId, from: s.votedOut, text: s.guess });
   if (s.result) onResult(s.result);
+  if (s.kept) onKeep({ roundId });
   go();
 }
 
@@ -915,8 +929,9 @@ function gameRender() {
   $("oscores").hidden = !(R.revealed && hasScore());
   $("oscorelist").innerHTML = scoreList();
   $("owaitp").hidden = host || !R.revealed;
-  $("owordline").hidden = $("oimpline").hidden = !R.revealed;
+  $("owordline").hidden = $("oimpline").hidden = $("orml").hidden = !R.revealed;
   if (R.revealed) {
+    autoRm(); $("orml").textContent = t(R.kept ? "keptNote" : "rmNote");
     const imps = R.reds.map(nameOf);
     $("owordline").innerHTML = `${esc(t("wasWord"))}<b>${esc(R.word)}</b>`;
     $("oimpline").innerHTML = `${esc(t("impLabel", imps.length))}: <b>${esc(imps.join(", "))}</b>`;
@@ -962,10 +977,10 @@ $("gin").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) $("gsend").
 $("ocorrect").onclick = () => R && once("res") && sendResult(true);
 $("owrong").onclick = $("oskip").onclick = () => R && once("res") && sendResult(false);
 $("oback").onclick = () => send("lobby", { epoch: bump() });
-$("okeep").onclick = startRound;
-$("orm").onclick = () => {
-  const ex = R.lang === lang ? excluded : load("excluded_" + R.lang);
-  ex.add(R.word); save("excluded_" + R.lang, ex); render();
+$("onext").onclick = startRound;
+$("okeep").onclick = () => {
+  const k = { roundId: R.roundId, word: R.word, lang: R.lang };
+  onKeep(k); send("keep", k);   // undo locally first so startRound's pool has the word again
   startRound();
 };
 
