@@ -12,7 +12,7 @@
   :root {
     color-scheme: dark;
     --bg: #14131a; --fg: #f1eff7; --muted: #8d8a9c; --line: #2a2833;
-    --blue: #2f6bff; --red: #ff3b4a; --gray: #3a3844;
+    --blue: #2f6bff; --red: #ff3b4a; --gray: #3a3844; --yellow: #f5c518;
     --tonal: #26242e; --surface: #1d1b25; --accent: #7aa2ff;
     --display: "Bricolage Grotesque", system-ui, sans-serif;
   }
@@ -66,6 +66,7 @@
   }
   #card.blue, #ocard.blue { background: var(--blue); }
   #card.red, #ocard.red { background: var(--red); }
+  #card.same, #ocard.same { background: var(--yellow); color: #14131a; }   /* "hide colors": everyone looks the same from across the room */
   #card .word, #ocard .word { font-size: 2.6rem; line-height: 1.05; text-wrap: balance; }
   #card small, #ocard small { font-size: 1rem; font-weight: 500; opacity: .75; }
   #end { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
@@ -173,6 +174,7 @@
     <div id="opts">
       <label class="opt"><span data-t="optCat"></span><input type="checkbox" data-o="cat"></label>
       <label class="opt"><span data-t="optFirst"></span><input type="checkbox" data-o="first"></label>
+      <label class="opt"><span data-t="optHide"></span><input type="checkbox" data-o="hide"></label>
       <label class="opt" id="optNamesRow"><span data-t="optNames"></span><input type="checkbox" data-o="names"></label>
       <div class="opt"><span data-t="optTimer"></span></div>
       <div class="chips" id="tmr"></div>
@@ -333,7 +335,7 @@ const CATS = [
 const UI = {
   en: { players: "Players", imposters: "Imposters", options: "Options", cats: "Categories", words: "Words", search: "Search words",
     split: (b, r) => `${b} blue · ${r} red`, noMatch: "No word matches your search", turnOn: "Turn on a category",
-    inPlay: p => `${p} in play`, none: "No words in play", optCat: "Imposter sees the category", optFirst: "Random first speaker",
+    inPlay: p => `${p} in play`, none: "No words in play", optCat: "Imposter sees the category", optFirst: "Random first speaker", optHide: "Hide colors (everyone sees yellow)",
     optNames: "Player names", optTimer: "Discussion timer", off: "Off", min: m => `${m} min`, start: "Start round", pass: "Pass the phone",
     left: k => `${k} left`, playerN: k => `Player ${k}`, passPhone: "Pass the phone · ", tapSee: "Tap to see your color",
     imposter: "IMPOSTER", blend: "Blend in · tap to hide", wordIs: "The word is", tapHide: "Tap to hide", category: c => `Category: ${c}`,
@@ -357,7 +359,7 @@ const UI = {
     reconnecting: "Reconnecting…", away: "away", skipGuess: "Skip guess" },
   he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
     split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
-    inPlay: p => `${p} במשחק`, none: "אין מילים במשחק", optCat: "המתחזה רואה את הקטגוריה", optFirst: "דובר ראשון אקראי",
+    inPlay: p => `${p} במשחק`, none: "אין מילים במשחק", optCat: "המתחזה רואה את הקטגוריה", optFirst: "דובר ראשון אקראי", optHide: "הסתרת צבעים (כולם רואים צהוב)",
     optNames: "שמות שחקנים", optTimer: "טיימר דיון", off: "כבוי", min: m => `${m} דק׳`, start: "התחל סיבוב", pass: "מעבירים את הטלפון",
     left: k => `נשארו ${k}`, playerN: k => `שחקן ${k}`, passPhone: "העבר את הטלפון · ", tapSee: "הקש כדי לראות את הצבע",
     imposter: "מתחזה", blend: "תשתלב · הקש להסתרה", wordIs: "המילה היא", tapHide: "הקש להסתרה", category: c => `קטגוריה: ${c}`,
@@ -394,7 +396,7 @@ try { if (localStorage.getItem("excluded_en") == null && localStorage.getItem("e
 
 let lang = loadJ("lang", "en") === "he" ? "he" : "en";
 let lAuto = false, n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
-const opts = { cat: false, first: false, names: false, timer: 0, ...loadJ("opts", {}) };
+const opts = { cat: false, first: false, hide: false, names: false, timer: 0, ...loadJ("opts", {}) };
 let names = loadJ("names", []); if (!Array.isArray(names)) names = [];
 let excluded = load("excluded_" + lang), custom = loadCustom(lang);   // custom: [{w, c}]
 const offCats = new Set([...load("offCats")].map(x => CATS.find(c => c.en === x)?.id ?? x));   // old saves used English labels
@@ -591,7 +593,7 @@ $("card").onclick = () => {
   const r = roles[i++];
   waiting = busy = true;
   setTimeout(() => busy = false, 400);   // ponytail: stops a double-tap hiding the color instantly
-  $("card").className = r;
+  $("card").className = opts.hide ? "same" : r;
   $("card").innerHTML = r === "red"
     ? `<span class="word">${t("imposter")}</span>${opts.cat ? `<small>${esc(t("category", wordCat))}</small>` : ""}<small>${t("blend")}</small>`
     : `<small>${t("wordIs")}</small><span class="word">${esc(word)}</span><small>${t("tapHide")}</small>`;
@@ -828,7 +830,7 @@ function startRound() {
     epoch: bump(), roundId: Date.now().toString(36) + rnd(1e6).toString(36), lang,
     players: ids.map(id => ({ id, name: players[id].name })), reds, word: pick.w,
     cat: CATS.find(c => c.id === pick.c)[lang],
-    opts: { cat: !!opts.cat, first: !!opts.first, timer: opts.timer },
+    opts: { cat: !!opts.cat, first: !!opts.first, hide: !!opts.hide, timer: opts.timer },
     firstId: opts.first ? ids[rnd(n)] : null,
   });
 }
@@ -861,7 +863,7 @@ function cardRender() {
   if (R.v === 0) { c.className = ""; c.innerHTML = `${esc(myName)}<small>${esc(t("tapSee"))}</small>`; }
   else if (R.v === 2) { c.className = ""; c.textContent = t("tapAgain"); }
   else {
-    c.className = red ? "red" : "blue";
+    c.className = R.opts.hide ? "same" : red ? "red" : "blue";
     c.innerHTML = red
       ? `<span class="word">${esc(t("imposter"))}</span>${R.opts.cat ? `<small>${esc(t("category", R.cat))}</small>` : ""}<small>${esc(t("blend"))}</small>`
       : `<small>${esc(t("wordIs"))}</small><span class="word">${esc(R.word)}</span><small>${esc(t("tapHide"))}</small>`;
