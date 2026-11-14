@@ -26,7 +26,7 @@
     -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
   }
   main { max-width: 440px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-  #setup, #home, #room { height: auto; min-height: 100%; gap: 16px; }
+  #setup, #home, #room, #game { height: auto; min-height: 100%; gap: 16px; }
   h1 { font-size: 2.4rem; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
   h1 span { color: var(--red); }
   .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
@@ -113,6 +113,11 @@
   .pts { font-variant-numeric: tabular-nums; font-weight: 800; }
   .vl { padding: 4px 16px; gap: 0; }
   #gtext, #resline { overflow-wrap: anywhere; }
+  .cf { display: flex; gap: 8px; } .cf .nm { flex: 1; width: auto; min-width: 0; } .cf .tonal { padding: 0 20px; }
+  .cw { flex: 1; min-width: 0; text-align: end; overflow-wrap: anywhere; } .m { color: var(--muted); }
+  .cl .pl { padding-block: 8px; } .cl .pl > span:first-child { flex: none; max-width: 45%; overflow-wrap: anywhere; }
+  .lc { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); } .lc:last-child { border-bottom: 0; }
+  .lc label { font-size: 1.05rem; } .lw { overflow-wrap: anywhere; }
   @media (prefers-reduced-motion: reduce) { #clock.up, #oclock.up { animation: none; } }
 </style>
 </head>
@@ -227,6 +232,14 @@
   <div class="row"><span class="label" data-t="roundLbl"></span><span class="count" id="seen"></span></div>
   <button id="ocard"></button>
   <p class="endq" id="onot" hidden data-t="inProgress"></p>
+  <section class="sec" id="oclues" hidden>
+    <div class="sec" id="cform">
+      <label class="label" for="cin" data-t="clueLbl"></label>
+      <div class="cf"><input class="nm" id="cin" maxlength="30" dir="auto" autocomplete="off"><button class="tonal" id="cadd" data-t="add"></button></div>
+    </div>
+    <h2 class="label" data-t="wordsSaid"></h2>
+    <div class="card vl cl" id="clist"></div>
+  </section>
   <div id="obelow">
     <p class="hint" id="oaway" hidden></p>
     <div id="ofirst" hidden></div>
@@ -284,6 +297,10 @@
       <div id="clock"></div>
       <button class="tonal" id="tstart" data-t="startTimer"></button>
     </div>
+    <section class="sec" id="lclues">
+      <h2 class="label" data-t="wordsSaid"></h2>
+      <div class="card vl" id="lclist"></div>
+    </section>
     <button class="go" id="reveal" data-t="reveal"></button>
     <div id="post" hidden>
       <div id="wordline"></div>
@@ -356,6 +373,7 @@ const UI = {
     guessed: (p, g) => `${p} guessed: ${g}`, correct: "Correct", wrong: "Wrong", judging: "Waiting for the host to judge…",
     resCrew: p => `Crew wins — ${p} was the imposter`, resNot: p => `Imposter wins — ${p} was not caught`, resGuess: "Imposter wins — guessed the word",
     votesLbl: "Votes", scores: "Scores", arrow: "→",
+    clueLbl: "Your word", wordsSaid: "Words said",
     reconnecting: "Reconnecting…", away: "away", skipGuess: "Skip guess" },
   he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
     split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
@@ -380,6 +398,7 @@ const UI = {
     guessed: (p, g) => `${p} ניחש/ה: ${g}`, correct: "נכון", wrong: "לא נכון", judging: "ממתינים שהמארח ישפוט…",
     resCrew: p => `הצוות מנצח — ${p} היה/הייתה המתחזה`, resNot: p => `המתחזים מנצחים — ${p} לא נתפס/ה`, resGuess: "המתחזים מנצחים — ניחשו את המילה",
     votesLbl: "הצבעות", scores: "ניקוד", arrow: "←",
+    clueLbl: "המילה שלך", wordsSaid: "מילים שנאמרו",
     reconnecting: "מתחבר מחדש…", away: "לא מחובר", skipGuess: "דלג על הניחוש" },
 };
 const $ = id => document.getElementById(id);
@@ -395,7 +414,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 try { if (localStorage.getItem("excluded_en") == null && localStorage.getItem("excluded") != null) localStorage.setItem("excluded_en", localStorage.getItem("excluded")); } catch {}
 
 let lang = loadJ("lang", "en") === "he" ? "he" : "en";
-let lAuto = false, n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
+let lClues = [], lAuto = false, n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
 const opts = { cat: false, first: false, hide: false, names: false, timer: 0, ...loadJ("opts", {}) };
 let names = loadJ("names", []); if (!Array.isArray(names)) names = [];
 let excluded = load("excluded_" + lang), custom = loadCustom(lang);   // custom: [{w, c}]
@@ -544,6 +563,7 @@ function newRound() {
   word = lastWord = pick.w; wordCat = CATS.find(c => c.id === pick.c)[lang];
   const reds = pickReds(n, nImp);
   roles = Array.from({ length: n }, (_, k) => reds.has(k) ? "red" : "blue");
+  lClues = Array.from({ length: n }, () => []);
   i = 0; busy = waiting = false; idle();
   show("game");
 }
@@ -558,8 +578,23 @@ function idle() {
   else showEnd();
 }
 
+const CLUES = 5;   // words per player per round
+const clean = s => String(s ?? "").trim().slice(0, 30);
+const bdiJoin = a => a.map(w => `<bdi>${esc(w)}</bdi>`).join(", ");   // keep each word's own direction
+const cluesRows = (a, k) => `<div class="lw${a.length ? "" : " m"}" id="lw${k}">${a.length ? bdiJoin(a) : "—"}</div>`;
+function buildClues() {   // built once per round; adding a word only touches that row, so other inputs keep their text
+  $("lclist").innerHTML = lClues.map((a, k) => `<div class="lc"><label for="lc${k}">${esc(nm(k))}</label>${cluesRows(a, k)}<div class="cf" id="lf${k}"><input class="nm" id="lc${k}" maxlength="30" dir="auto" autocomplete="off"><button class="tonal" data-k="${k}">${esc(t("add"))}</button></div></div>`).join("");
+}
+function addLocalClue(k) {
+  const inp = $("lc" + k), text = clean(inp.value), a = lClues[k];
+  if (!text || a.length >= CLUES) return;
+  a.push(text); inp.value = "";
+  $("lw" + k).outerHTML = cluesRows(a, k); $("lf" + k).hidden = a.length >= CLUES;
+}
+$("lclist").onclick = e => { const b = e.target.closest("button[data-k]"); if (b) addLocalClue(+b.dataset.k); };
+$("lclist").onkeydown = e => { if (e.key === "Enter" && !e.isComposing && e.target.id?.startsWith("lc")) addLocalClue(+e.target.id.slice(2)); };
 function showEnd() {
-  stopT();
+  stopT(); buildClues();
   $("post").hidden = true; $("reveal").hidden = false;
   firstP = opts.first ? rnd(n) : -1;
   $("first").hidden = firstP < 0;
@@ -673,7 +708,7 @@ function connect() {
     for (const k in st) players[k] = st[k][0];
     go();
   });
-  on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync); on("state", onState);
+  on("round", onRound); on("seen", onSeen); on("timer", onTimer); on("reveal", onReveal); on("lobby", onLobby); on("sync", onSync); on("state", onState); on("clue", onClue);
   on("vote_start", onVoteStart); on("vote", onVote); on("vote_end", onVoteEnd); on("guess", onGuess); on("result", onResult); on("keep", onKeep);
   c.subscribe(async st => {
     if (c !== ch) return;
@@ -727,8 +762,8 @@ function onRound(p) {
   const e = p.epoch || 0;
   if (e < epoch || (R && R.roundId === p.roundId)) return;   // older than what we have, or already have it
   epoch = e; stopT();
-  R = { ...p, seen: new Set(), revealed: false, endAt: 0, done: false, v: 0, voting: false, votes: {}, voteEnded: false, votedOut: null, guess: null, result: null, sent: new Set() };
-  $("gin").value = "";
+  R = { ...p, seen: new Set(), revealed: false, endAt: 0, done: false, v: 0, voting: false, votes: {}, voteEnded: false, votedOut: null, guess: null, result: null, sent: new Set(), clues: {} };
+  $("gin").value = ""; $("cin").value = "";
   go();
 }
 function onSeen(p) {
@@ -739,6 +774,14 @@ function onSeen(p) {
 function onTimer(p) {
   if (R?.roundId !== p.roundId || R.endAt === p.endAt) return;
   R.endAt = p.endAt; R.done = false; go();
+}
+function onClue(p) {   // idempotent: first text for (id, n) wins
+  if (R?.roundId !== p.roundId || !R.players.some(x => x.id === p.id) || !Number.isInteger(p.n) || p.n < 0 || p.n >= CLUES) return;
+  const text = clean(p.text), a = R.clues[p.id] ||= [];
+  if (!text || a[p.n] != null) return;
+  a[p.n] = text;
+  if (p.id === myId) $("cin").value = "";
+  go();
 }
 function onReveal(p) { if (R?.roundId !== p.roundId) return; R.revealed = true; go(); }
 const exSet = l => l === lang ? excluded : load("excluded_" + l);
@@ -777,8 +820,8 @@ const tot = sc => Object.values(sc).reduce((a, x) => a + x.pts, 0);
 function snap() {
   const o = { epoch, scores, round: null };
   if (R) {
-    const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, autoRm, kept, rmDone, ...rd } = R;
-    Object.assign(o, { kept: !!kept, round: rd, seen: [...seen], endAt, revealed, voting, votes, voteEnded, votedOut, guess, result });
+    const { seen, revealed, endAt, done, v, voting, votes, voteEnded, votedOut, guess, result, sent, autoRm, kept, rmDone, clues, ...rd } = R;
+    Object.assign(o, { clues, kept: !!kept, round: rd, seen: [...seen], endAt, revealed, voting, votes, voteEnded, votedOut, guess, result });
   }
   return o;
 }
@@ -793,6 +836,7 @@ function onState(s) {   // newer epoch wins; same round: replay the progress thr
   if (!R || !rd || R.roundId !== rd.roundId) return go();
   const roundId = R.roundId;
   onSeen({ roundId, ids: s.seen || [] });
+  for (const [id, a] of Object.entries(s.clues || {})) (Array.isArray(a) ? a : []).forEach((text, n) => onClue({ roundId, id, n, text }));
   if (s.endAt) onTimer({ roundId, endAt: s.endAt });
   if (s.revealed && !s.voting) onReveal({ roundId });
   if (s.voting) onVoteStart({ roundId, votes: s.votes });
@@ -933,6 +977,11 @@ function gameRender() {
       `<div class="pl"><span><bdi>${esc(nameOf(f))}</bdi> ${esc(t("arrow"))} <bdi>${esc(nameOf(to))}</bdi></span></div>`).join("");
     $("vsec").hidden = !$("vlog").firstChild;
   }
+  const myC = R.clues[myId] || [];
+  $("oclues").hidden = !(late || R.seen.has(myId));
+  $("cform").hidden = !(me && R.seen.has(myId) && !R.revealed && myC.length < CLUES);
+  $("clist").innerHTML = R.players.map(p => { const a = (R.clues[p.id] || []).filter(Boolean);
+    return `<div class="pl"><span>${esc(p.name)}${p.id === myId ? ` <small class="m">${esc(t("you"))}</small>` : ""}</span><span class="cw${a.length ? "" : " m"}">${a.length ? bdiJoin(a) : "—"}</span></div>`; }).join("");
   $("oscores").hidden = !(R.revealed && hasScore());
   $("oscorelist").innerHTML = scoreList();
   $("owaitp").hidden = host || !R.revealed;
@@ -983,6 +1032,14 @@ $("gsend").onclick = () => { const text = $("gin").value.trim(); if (text && R) 
 $("gin").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) $("gsend").click(); };
 $("ocorrect").onclick = () => R && once("res") && sendResult(true);
 $("owrong").onclick = $("oskip").onclick = () => R && once("res") && sendResult(false);
+function addClue() {
+  const text = clean($("cin").value), n = (R?.clues[myId] || []).length;
+  if (!(text && R && n < CLUES)) return;
+  const p = { roundId: R.roundId, id: myId, n, text };
+  onClue(p); send("clue", p);
+}
+$("cadd").onclick = addClue;
+$("cin").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) addClue(); };
 $("oback").onclick = () => send("lobby", { epoch: bump() });
 $("onext").onclick = startRound;
 $("okeep").onclick = () => {
