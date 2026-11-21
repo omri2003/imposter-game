@@ -55,6 +55,10 @@
   #words .hint { padding: 14px; }
   #words small { color: var(--muted); font-size: .8rem; }
   #words .txt { align-self: center; margin-inline-start: auto; }
+  .langs2 { align-items: center; margin-top: -8px; }
+  .tl { display: block; font-size: 1.25rem; font-weight: 500; line-height: 1.2; opacity: .75; }
+  #words .tw { display: block; font-size: .85rem; overflow-wrap: anywhere; }
+  #words label > span { min-width: 0; overflow-wrap: anywhere; }
   .aw { display: flex; flex-wrap: wrap; gap: 8px; }
   .aw .nm { flex: 1 1 100%; } .aw #cc { flex: 1 1 0; min-width: 0; width: auto; background: var(--surface); }
   .aw .tonal { padding: 0 20px; }
@@ -127,6 +131,7 @@
 <main id="home">
   <h1>Imp<span>o</span>ster</h1>
   <div class="chips langs"></div>
+  <div class="chips langs2"></div>
   <div class="sec">
     <label class="label" for="name" data-t="yourName"></label>
     <input class="nm" id="name" maxlength="16" data-ph="namePh" autocomplete="off">
@@ -158,6 +163,7 @@
   <button class="txt" id="tohome" data-t="back"></button>
   <h1>Imp<span>o</span>ster</h1>
   <div class="chips langs"></div>
+  <div class="chips langs2"></div>
   <div class="label" data-t="players"></div>
   <div class="stepper">
     <button id="minus" aria-label="−">−</button>
@@ -374,6 +380,7 @@ const UI = {
     resCrew: p => `Crew wins — ${p} was the imposter`, resNot: p => `Imposter wins — ${p} was not caught`, resGuess: "Imposter wins — guessed the word",
     votesLbl: "Votes", scores: "Scores", arrow: "→",
     clueLbl: "Your word", wordsSaid: "Words said",
+    lang2: "Second language", noLang2: "None",
     reconnecting: "Reconnecting…", away: "away", skipGuess: "Skip guess" },
   he: { players: "שחקנים", imposters: "מתחזים", options: "אפשרויות", cats: "קטגוריות", words: "מילים", search: "חיפוש מילה",
     split: (b, r) => `${b} כחולים · ${r} אדומים`, noMatch: "אין מילה שמתאימה לחיפוש", turnOn: "הפעל קטגוריה",
@@ -399,6 +406,7 @@ const UI = {
     resCrew: p => `הצוות מנצח — ${p} היה/הייתה המתחזה`, resNot: p => `המתחזים מנצחים — ${p} לא נתפס/ה`, resGuess: "המתחזים מנצחים — ניחשו את המילה",
     votesLbl: "הצבעות", scores: "ניקוד", arrow: "←",
     clueLbl: "המילה שלך", wordsSaid: "מילים שנאמרו",
+    lang2: "שפה שנייה", noLang2: "ללא",
     reconnecting: "מתחבר מחדש…", away: "לא מחובר", skipGuess: "דלג על הניחוש" },
 };
 const $ = id => document.getElementById(id);
@@ -410,10 +418,24 @@ const saveJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 const loadCustom = l => { const v = loadJ("custom_" + l, []); return Array.isArray(v) ? v.filter(x => x && typeof x.w === "string" && typeof x.c === "string") : []; };
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
+// tr-begin: word in `from` -> same-index word in `to`; null if unknown (custom words). Lookup maps built once.
+const FLAT = { en: CATS.flatMap(c => c.words.en), he: CATS.flatMap(c => c.words.he) };
+const IDX = Object.fromEntries(Object.entries(FLAT).map(([l, a]) => [l, new Map(a.map((w, k) => [w, k]).reverse())]));   // reversed: first duplicate wins
+const tr = (w, from, to) => { const k = IDX[from]?.get(w); return k == null ? null : FLAT[to]?.[k] ?? null; };
+// tr-end
 // one-time migration of the old single exclusion list
 try { if (localStorage.getItem("excluded_en") == null && localStorage.getItem("excluded") != null) localStorage.setItem("excluded_en", localStorage.getItem("excluded")); } catch {}
 
 let lang = loadJ("lang", "en") === "he" ? "he" : "en";
+const other = l => l === "he" ? "en" : "he";
+let lang2 = loadJ("lang2", "") === other(lang) ? other(lang) : "";   // second language: "" (none) or the language that isn't the primary
+// translation line under a shown word (words from `from`), "" if no second language or no translation
+const tl = (w, from) => { const x = lang2 && tr(w, from, other(from)); return x ? `<span class="tl"><bdi dir="auto">${esc(x)}</bdi></span>` : ""; };
+// "Category: Food · אוכל"
+function catHtml(label, from) {
+  const c = lang2 && CATS.find(c => c[from] === label), parts = [label, c && c[other(from)]].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(" · ");
+  return esc(t("category", "\u0001")).replace("\u0001", parts);
+}
 let lClues = [], lAuto = false, n = 5, nImp = 1, roles = [], i = 0, word = "", wordCat = "", lastWord = "", busy = false, waiting = false, firstP = -1, endAt = 0, timerId = 0;
 const opts = { cat: false, first: false, hide: false, names: false, timer: 0, ...loadJ("opts", {}) };
 let names = loadJ("names", []); if (!Array.isArray(names)) names = [];
@@ -488,6 +510,7 @@ function syncOpts() {
 
 function setLang(l) {
   lang = l; saveJ("lang", l);
+  if (lang2 === l) { lang2 = ""; saveJ("lang2", ""); }
   document.documentElement.lang = l; document.documentElement.dir = l === "he" ? "rtl" : "ltr";
   excluded = load("excluded_" + l); custom = loadCustom(l);
   document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t));
@@ -495,6 +518,8 @@ function setLang(l) {
   $("tohome").setAttribute("aria-label", t("backLbl")); $("invT").textContent = t("joinRoomN", inviteCode);
   document.querySelectorAll(".langs").forEach(el => el.innerHTML = [["en", "English"], ["he", "עברית"]].map(([k, v]) =>
     `<button class="chip" data-l="${k}" aria-pressed="${lang === k}">${v}</button>`).join(""));
+  document.querySelectorAll(".langs2").forEach(el => el.innerHTML = `<span class="label">${esc(t("lang2"))}</span>` + [["", t("noLang2")], [other(lang), other(lang) === "he" ? "עברית" : "English"]].map(([k, v]) =>
+    `<button class="chip" data-l2="${k}" aria-pressed="${lang2 === k}">${v}</button>`).join(""));
   fillSel(); syncOpts(); $("n").textContent = n; syncImp(); render(); go(); mainLbl();
 }
 // One main button: empty code = host a new room, any code = join it
@@ -509,16 +534,17 @@ function render() {
   $("cats").innerHTML = CATS.filter(c => c.id !== "mine" || custom.some(x => x.c === "mine")).map(c =>
     `<button class="chip" data-c="${c.id}" aria-pressed="${!offCats.has(c.id)}">${esc(c[lang])}</button>`).join("");
   const q = $("q").value.trim().toLowerCase();
-  const list = visible().filter(x => x.w.toLowerCase().includes(q));
+  const list = visible().map(x => ({ ...x, o: lang2 ? tr(x.w, lang, lang2) : null })).filter(x => x.w.toLowerCase().includes(q) || (x.o || "").toLowerCase().includes(q));
   const mine = new Set(custom.map(x => x.w));
-  $("words").innerHTML = list.map(({ w }) =>
-    `<label class="${excluded.has(w) ? "off" : ""}"><input type="checkbox" data-w="${esc(w)}" aria-label="${esc(w)}" ${excluded.has(w) ? "" : "checked"}><span>${esc(w)}</span>${mine.has(w) ? `<small>${t("mineTag")}</small><button class="txt" data-del="${esc(w)}">${t("del")}</button>` : ""}</label>`
+  $("words").innerHTML = list.map(({ w, o }) =>
+    `<label class="${excluded.has(w) ? "off" : ""}"><input type="checkbox" data-w="${esc(w)}" aria-label="${esc(w)}" ${excluded.has(w) ? "" : "checked"}><span>${esc(w)}${o ? `<small class="tw"><bdi dir="auto">${esc(o)}</bdi></small>` : ""}</span>${mine.has(w) ? `<small>${t("mineTag")}</small><button class="txt" data-del="${esc(w)}">${t("del")}</button>` : ""}</label>`
   ).join("") || `<p class="hint">${t(q ? "noMatch" : "turnOn")}</p>`;
   const p = pool().length;
   $("wcount").textContent = p ? t("inPlay", p) : t("none");
   $("wcount").className = p ? "hint" : "hint warn";
 }
 document.querySelectorAll(".langs").forEach(el => el.onclick = e => { const l = e.target.dataset.l; if (l) setLang(l); });
+document.querySelectorAll(".langs2").forEach(el => el.onclick = e => { const b = e.target.closest("[data-l2]"); if (b) { lang2 = b.dataset.l2; saveJ("lang2", lang2); setLang(lang); } });
 $("cats").onclick = e => {
   const c = e.target.dataset.c; if (!c) return;
   offCats.has(c) ? offCats.delete(c) : offCats.add(c);
@@ -616,7 +642,7 @@ $("tstart").onclick = () => {
 };
 $("reveal").onclick = () => {
   const imps = roles.flatMap((r, k) => r === "red" ? [nm(k)] : []);
-  $("wordline").innerHTML = `${t("wasWord")}<b>${esc(word)}</b>`;
+  $("wordline").innerHTML = `${t("wasWord")}<b>${esc(word)}</b>${tl(word, lang)}`;
   $("impline").innerHTML = `${t("impLabel", imps.length)}: <b>${esc(imps.join(", "))}</b>`;
   $("reveal").hidden = true; $("post").hidden = false;
   lAuto = !excluded.has(word); excluded.add(word); save("excluded_" + lang, excluded); render();   // removed by default
@@ -630,8 +656,8 @@ $("card").onclick = () => {
   setTimeout(() => busy = false, 400);   // ponytail: stops a double-tap hiding the color instantly
   $("card").className = opts.hide ? "same" : r;
   $("card").innerHTML = r === "red"
-    ? `<span class="word">${t("imposter")}</span>${opts.cat ? `<small>${esc(t("category", wordCat))}</small>` : ""}<small>${t("blend")}</small>`
-    : `<small>${t("wordIs")}</small><span class="word">${esc(word)}</span><small>${t("tapHide")}</small>`;
+    ? `<span class="word">${t("imposter")}</span>${opts.cat ? `<small>${catHtml(wordCat, lang)}</small>` : ""}<small>${t("blend")}</small>`
+    : `<small>${t("wordIs")}</small><span class="word">${esc(word)}</span>${tl(word, lang)}<small>${t("tapHide")}</small>`;
 };
 
 $("minus").onclick = () => setN(n - 1);
@@ -909,8 +935,8 @@ function cardRender() {
   else {
     c.className = R.opts.hide ? "same" : red ? "red" : "blue";
     c.innerHTML = red
-      ? `<span class="word">${esc(t("imposter"))}</span>${R.opts.cat ? `<small>${esc(t("category", R.cat))}</small>` : ""}<small>${esc(t("blend"))}</small>`
-      : `<small>${esc(t("wordIs"))}</small><span class="word">${esc(R.word)}</span><small>${esc(t("tapHide"))}</small>`;
+      ? `<span class="word">${esc(t("imposter"))}</span>${R.opts.cat ? `<small>${catHtml(R.cat, R.lang)}</small>` : ""}<small>${esc(t("blend"))}</small>`
+      : `<small>${esc(t("wordIs"))}</small><span class="word">${esc(R.word)}</span>${tl(R.word, R.lang)}<small>${esc(t("tapHide"))}</small>`;
   }
 }
 
@@ -989,7 +1015,7 @@ function gameRender() {
   if (R.revealed) {
     autoRm(); $("orml").textContent = t(R.kept ? "keptNote" : "rmNote");
     const imps = R.reds.map(nameOf);
-    $("owordline").innerHTML = `${esc(t("wasWord"))}<b>${esc(R.word)}</b>`;
+    $("owordline").innerHTML = `${esc(t("wasWord"))}<b>${esc(R.word)}</b>${tl(R.word, R.lang)}`;
     $("oimpline").innerHTML = `${esc(t("impLabel", imps.length))}: <b>${esc(imps.join(", "))}</b>`;
   }
 }
